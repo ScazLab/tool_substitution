@@ -2,7 +2,6 @@
 
 import math
 import numpy as np
-import pandas as pd
 
 import stl
 from stl import mesh
@@ -54,51 +53,6 @@ def stl_to_pointcloud(n, mesh):
 
     return results.astype(np.float32)
 
-def gen_mesh_cube():
-    # Create 3 faces of a cube
-    data = np.zeros(6, dtype=mesh.Mesh.dtype)
-
-    # Top of the cube
-    data['vectors'][0] = np.array([[0, 1, 1],
-                                    [1, 0, 1],
-                                    [0, 0, 1]])
-    data['vectors'][1] = np.array([[1, 0, 1],
-                                    [0, 1, 1],
-                                    [1, 1, 1]])
-    # Right face
-    data['vectors'][2] = np.array([[1, 0, 0],
-                                    [1, 0, 1],
-                                    [1, 1, 0]])
-    data['vectors'][3] = np.array([[1, 1, 1],
-                                    [1, 0, 1],
-                                    [1, 1, 0]])
-    # Left face
-    data['vectors'][4] = np.array([[0, 0, 0],
-                                    [1, 0, 0],
-                                    [1, 0, 1]])
-    data['vectors'][5] = np.array([[0, 0, 0],
-                                    [0, 0, 1],
-                                    [1, 0, 1]])
-
-    # Since the cube faces are from 0 to 1 we can move it to the middle by
-    # substracting .5
-    data['vectors'] -= .5
-
-    cube_back = mesh.Mesh(data.copy())
-    cube_front = mesh.Mesh(data.copy())
-
-    # Rotate 90 degrees over the X axis followed by the Y axis followed by the
-    # X axis
-    cube_back.rotate([0.5, 0.0, 0.0], math.radians(90))
-    cube_back.rotate([0.0, 0.5, 0.0], math.radians(90))
-    cube_back.rotate([0.5, 0.0, 0.0], math.radians(90))
-
-    cube = mesh.Mesh(np.concatenate([
-        cube_back.data.copy(),
-        cube_front.data.copy(),
-    ]))
-
-    return cube
 
 def get_guitar_points(n):
     m = mesh.Mesh.from_file('./tool_files/guitar.stl')
@@ -120,12 +74,6 @@ def get_saw_points(n):
     return np.array([pnt for pnt in pnts if pnt[0] > 2200])
 
 
-def get_saw_points(n):
-    m = mesh.Mesh.from_file('./tool_files/tools.stl')
-    pnts = stl_to_pointcloud(n, m)
-    # This gets only the points for the human figure modeled in this file
-    return np.array([pnt for pnt in pnts if pnt[0] > 2200])
-
 def test_sampling(n, mesh):
 
     fig = plt.figure()
@@ -140,10 +88,10 @@ def get_hammer_points(n):
     # This gets only the points for the human figure modeled in this file
     return np.array([pnt for pnt in pnts if pnt[0] > 1914 and pnt[0] < 2200])
 
-    ax.scatter(xs=pnts[:,0], ys=pnts[:,1], zs=pnts[:,2], c='b')
-
-    plt.show()
-
+def get_rake_points(n):
+    m = mesh.Mesh.from_file('./tool_files/rake.stl')
+    pnts = stl_to_pointcloud(n, m)
+    return pnts
 
 def plot_pnts(pnts):
 
