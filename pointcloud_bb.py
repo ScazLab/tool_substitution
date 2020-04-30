@@ -15,6 +15,8 @@ class BoundingBox(object):
         "Generates 2D or 3D bounding box around points"
         self.pnts = pnts
 
+        self.eps = 0.05 # Error term for deciding best bounding box
+
         self.pca2D = PCA(n_components=2)
         self.pca3D = PCA(n_components=3)
 
@@ -48,7 +50,20 @@ class BoundingBox(object):
 
 
         areas = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])
-        k     = np.argmin(areas) # index of points with smallest bb area
+        perimeters = abs((y[0, :] - y[1, :]) - (x[0, :] - x[1, :]))
+
+        k_p = np.argmin(perimeters)
+        k_a = np.argmin(areas) # index of points with smallest bb area
+
+        area_ratio = areas[k_a] / areas[k_p]
+        print("Area ratio: {}".format(area_ratio))
+
+        # If the most square-like bounding box has a tolerably
+        # small area, we choose it, otherwise we choose box with smallest area.
+        if  area_ratio >  1.0 - self.eps:
+            k = k_p
+        else:
+            k = k_a
 
         print("k: {}".format(k))
         print("x shape: {} y shape: {}".format(x.shape, y.shape))
