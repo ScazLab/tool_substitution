@@ -5,7 +5,7 @@
   So far this package primarily does two things:
    - Creates a minimum bounding box around 3D pointcloud
    - Measures shape similarity between to pointclouds via hamming distance
-   - 
+     
   References I used:
   
    - https://stackoverflow.com/questions/55529371/opencv-shape-matching-between-two-similar-shapes
