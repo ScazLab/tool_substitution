@@ -6,11 +6,13 @@ from compare_tools import bbs_to_img, CompareTools, FIGS_PATH
 from pointcloud_bb import BoundingBox
 
 from sample_points_from_stl import (get_guitar_points, get_man_points,
-                                    get_hammer_points, get_saw_points)
+                                    get_hammer_points, get_saw_points,
+                                    get_rake_points)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("tool", type=str, default='hammer',
-                    help="Tool to create bounding box for. Options: 'hammer', 'guitar', 'saw'")
+                    help="Tool to create bounding box for. \
+                    Options: 'hammer', 'guitar', 'saw', 'rake'")
 args = parser.parse_args()
 
 
@@ -29,6 +31,12 @@ def hammer_bb():
 
 def saw_bb():
     pnts = get_saw_points(7000)
+    bb = BoundingBox(pnts)
+    bb.plot_bb("2D")
+    bb.plot_bb("3D")
+
+def rake_bb():
+    pnts = get_rake_points(7000)
     bb = BoundingBox(pnts)
     bb.plot_bb("2D")
     bb.plot_bb("3D")
@@ -61,3 +69,5 @@ if __name__ == '__main__':
         saw_bb()
     elif args.tool == 'guitar':
         guitar_bb()
+    elif args.tool == 'rake':
+        rake_bb()

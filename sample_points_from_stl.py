@@ -91,7 +91,7 @@ def get_hammer_points(n):
 def get_rake_points(n):
     m = mesh.Mesh.from_file('./tool_files/rake.stl')
     pnts = stl_to_pointcloud(n, m)
-    return pnts
+    return np.array([pnt for pnt in pnts if pnt[2] > 4.184])
 
 def plot_pnts(pnts):
 
