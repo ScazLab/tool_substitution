@@ -158,12 +158,19 @@ class BoundingBox(object):
     def _project_on_to_pcs(self, components):
         pass
 
-    def _inverse_pc_transform(self):
+    def _inverse_pc_transform(self, axis):
         # Meiying
         pass
 
     def main(self):
         # Meiying
+        found_box = False
+        current_axis = [self.pca3D.components_[0,:], self.pca3D.components_[1,:], self.pca3D.components_[2,:]]
+        While not found_box:
+            pass
+    
+    def _bounding_box_to_axis(self, bb):
+        # bb is 10 by 3. The 5th and 10th one is a repetition
         pass
 
 
@@ -194,7 +201,7 @@ class BoundingBox(object):
     
         bb3D = np.vstack([bb_side1, bb_side2])
     
-        return bb3D        
+        return bb3D
 
     def mbb2D(self):
         """
