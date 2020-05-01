@@ -173,6 +173,28 @@ class BoundingBox(object):
         """
 
         bb2D = self.mbb2D()
+        
+        b3 = self.pca3D.components_[2,:] # 3rd PC
+        b3 = b3 / np.linalg.norm(b3) # normalize
+    
+        pnts_1d = self.pnts.dot(b3)
+    
+        # initial 2D bb is located in the center of the point cloud.
+        # We want to copy it and shift both in the directions of 3rd PC
+    
+        width = pnts_1d.max()  - pnts_1d.min()
+        width_dir = b3 * width / 2.0 # This tells us how to translate points
+    
+        # width_dir = b3 * pca3D.singular_values_[2] / 2
+    
+        bb3D = self.pca2D.inverse_transform(bb2D)
+    
+        bb_side1 = bb3D + width_dir
+        bb_side2 = bb3D - width_dir
+    
+        bb3D = np.vstack([bb_side1, bb_side2])
+    
+        return bb3D        
 
     def mbb2D(self):
         """
@@ -239,28 +261,7 @@ class BoundingBox(object):
         bb = inverse_rot.T.dot(rot_bb) # rotate points back to orig frame
 
         return bb.T
-        b3 = self.pca3D.components_[2,:] # 3rd PC
-        b3 = b3 / np.linalg.norm(b3) # normalize
-
-        pnts_1d = self.pnts.dot(b3)
-
-        # initial 2D bb is located in the center of the point cloud.
-        # We want to copy it and shift both in the directions of 3rd PC
-
-        width = pnts_1d.max()  - pnts_1d.min()
-        width_dir = b3 * width / 2.0 # This tells us how to translate points
-
-        # width_dir = b3 * pca3D.singular_values_[2] / 2
-
-        bb3D = self.pca2D.inverse_transform(bb2D)
-
-        bb_side1 = bb3D + width_dir
-        bb_side2 = bb3D - width_dir
-
-        bb3D = np.vstack([bb_side1, bb_side2])
-
-        return bb3D
-
+       
     def plot_bb(self, n="3D", ax=None):
         """Visualize points and bounding box"""
 
