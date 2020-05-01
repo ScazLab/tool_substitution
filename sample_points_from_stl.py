@@ -93,6 +93,20 @@ def get_rake_points(n):
     pnts = stl_to_pointcloud(n, m)
     return np.array([pnt for pnt in pnts if pnt[2] > 4.184])
 
+
+def get_l_points(n):
+    
+    rect1 = np.random.uniform(0,3, size=(n,3))
+    rect1[:, 2] = 0.0
+    rect2 = np.random.uniform(0,3, size=(n,3))
+    rect2[np.where(rect2[:,2] > 2.0)] = 2.
+    rect2[np.where(rect2[:,1] > 2.0)] = 2.
+    rect1[np.where(rect1[:,1] > 2.0)] = 1.
+    # rect2[np.where(rect2[:,1] > 2.0)] = 2.
+    rect2[:, 0] = 0.0
+    # rect2 = rect1.dot(Ry).dot(Rx).dot(Rz) - [-10,0,0]
+
+    return np.vstack([rect1, rect2])
 def plot_pnts(pnts):
 
     fig = plt.figure()
@@ -107,6 +121,7 @@ if __name__ == '__main__':
     tools_mesh = mesh.Mesh.from_file('./tool_files/tools.stl')
     # mesh = gen_mesh_cube()
     # plot_mesh(mesh)
-    pnts = get_hammer_points(50000)
+    # pnts = get_hammer_points(50000)
+    pnts = get_l_points(500)
     plot_pnts(pnts)
     test_sampling(5000, tools_mesh)
