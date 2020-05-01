@@ -50,26 +50,30 @@ class BoundingBox(object):
 
 
         areas = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])
-        perimeters = abs((y[0, :] - y[1, :]) - (x[0, :] - x[1, :]))
+        # ratio of side legnths. Closer to 0 the more square it is.
+        perimeters = abs(1.0 - ((y[0, :] - y[1, :]) / (x[0, :] - x[1, :])))
+        print(perimeters)
 
+        k_best = int(len(areas) * self.eps) # How many of best bbs to consider.
 
-        print('Areas: {}'.format(sorted(areas)))
+        # if zero, default to bb with smallest area
+        if k_best == 0:
+            k = np.argmin(areas) # index of points with smallest bb area
+        else:
+            print("k best: {}".format(k_best))
+            # Get indices of k_best smallest areas
+            best_areas_idx = np.argpartition(areas, k_best)[:k_best]
+            print("best areas: {}".format(best_areas_idx))
 
-        k_p = np.argmin(perimeters) 
+            # Get corresponding perimeters and choose most square one.
+            k_p = np.argmin(perimeters[best_areas_idx])
+            k = best_areas_idx[k_p]
+
         k_a = np.argmin(areas) # index of points with smallest bb area
 
-        area_ratio = areas[k_a] / areas[k_p]
-        print("Area ratio: {}".format(area_ratio))
-
-        # If the most square-like bounding box has a tolerably
-        # small area, we choose it, otherwise we choose box with smallest area.
-        if  area_ratio >  1.0 - self.eps:
-            k = k_p
-        else:
-            k = k_a
 
         print("k_a: {}".format(k_a))
-        print("k_p: {}".format(k_p))
+        print("k: {}".format(k))
         print("x shape: {} y shape: {}".format(x.shape, y.shape))
 
         print(x[:, k])
