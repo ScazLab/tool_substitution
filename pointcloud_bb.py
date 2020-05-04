@@ -41,7 +41,7 @@ class BoundingBox(object):
         b2 = np.vstack([-b1[:,1], b1[:, 0]]).T # Orthonomral axes
 
         print("b1 shape: {}, b2 shape: {}".format(b1.shape, b2.shape))
-        print("b1 and b2 orhtonormal?: {}".format(b1[4,:].dot(b2[4,:])))
+        # print("b1 and b2 orhtonormal?: {}".format(b1[4,:].dot(b2[4,:])))
 
         # Get extremes along each axis
         print("Hull pnts shape: ", hull_pnts.shape)
@@ -158,7 +158,7 @@ class BoundingBox(object):
         self.bases = components # Store bases in order to do inverse transform.
 
         if norm:
-            self.mean = pnts.mean(axis=1)
+            self.mean = pnts.mean(axis=0)
             pnts -= self.mean
 
         return np.dot(pnts, components.T)
@@ -204,9 +204,9 @@ class BoundingBox(object):
         axis_with_length.sort(order = 'length')
         return axis_with_length[:, :3].T
 
-    def _get_bounding_box(self, axis, projection_indices, other_index):
+    def _get_bounding_box(self, pnts, axis, projection_indices, other_index):
         # Meiying
-        pnts = self._transform(self.pca3D.components_[indices[(projection_indices], indices[projection_indices]), :]) # test and fix this
+        pnts = self._transform(self.pca3D.components_[indices[(projection_indices, indices[projection_indices]), :]]) # test and fix this
         bb2D = self.mbb2D(pnts)
         bb3D = self._inverse_pc_transform(bb2D, self.pca3D.components_[other_index, :])
         return bb3D
@@ -264,7 +264,7 @@ class BoundingBox(object):
         Estimate vertices of 3d bounding box using 2d bb and 3rd P.C.
         """
 
-        bb2D = self.mbb2D()
+        bb2D = self.mbb2D(self.pnts)
 
         b3 = self.pca3D.components_[2,:] # 3rd PC
         b3 = b3 / np.linalg.norm(b3) # normalize
@@ -309,10 +309,11 @@ class BoundingBox(object):
 
         elif n is "2D":
 
-            bb = self.mbb2D()
+            pnts = self._transform(self.pnts, self.pca2D.components_)
+            bb = self.mbb2D(pnts)
             ax = fig.add_subplot(111)
 
-            pnts = self.pca2D.transform(self.pnts)
+            # pnts = self.pca2D.transform(self.pnts)
             ax.scatter(x=pnts[:, 0], y=pnts[:,1], c='b')
             ax.plot(bb[[0,1], 0], bb[[0,1],1],c='r')
             ax.plot(bb[[1,2], 0], bb[[1,2],1],c='r')
