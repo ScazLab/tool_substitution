@@ -14,6 +14,7 @@ class BoundingBox(object):
     def __init__(self, pnts):
         "Generates 2D or 3D bounding box around points"
         self.pnts = pnts
+        self.mean = 0. # Stores the mean of the points
 
         self.eps = 0.05 # Error term for deciding best bounding box
 
@@ -159,8 +160,22 @@ class BoundingBox(object):
 
         return bb.T
 
-    def _project_on_to_pcs(self, components):
-        pass
+    def _transform(self, pnts, components, norm=True):
+        """
+        Projects @pnts onto @components bases.
+        """
+
+        self.bases = components # Store bases in order to do inverse transform.
+
+        if norm:
+            self.mean = pnts.mean(axis=1)
+            pnts -= self.mean
+
+        return np.dot(pnts, components.T)
+
+    def _inverse_transform(self, pnts):
+
+        return np.dot(pnts, self.bases) + self.mean
 
     def _inverse_pc_transform(self, bb2D, b3):
         # Meiying
@@ -201,7 +216,7 @@ class BoundingBox(object):
 
     def _get_bounding_box(self, axis, projection_indices, other_index):
         # Meiying
-        pnts = self._project_on_to_pcs(self.pca3D.components_[indices[(projection_indices], indices[projection_indices]), :]) # test and fix this
+        pnts = self._transform(self.pca3D.components_[indices[(projection_indices], indices[projection_indices]), :]) # test and fix this
         bb2D = self.mbb2D(pnts)
         bb3D = self._inverse_pc_transform(bb2D, self.pca3D.components_[other_index, :])
         return bb3D
