@@ -24,13 +24,14 @@ class BoundingBox(object):
         self.pca2D.fit(pnts)
         self.pca3D.fit(pnts)
 
-    def mbb2D(self):
+    def mbb2D(self, pnts):
         """
         Project 3D to 2D along first PCs and then analytically
         fit best minimum bounding box.
+
+        @pnts: A 2D set of points.
         """
 
-        pnts                = self.pca2D.transform(self.pnts) #TODO Transofrm for any arbitrary axis
         hull_pnts           = pnts[ConvexHull(pnts).vertices]
         connected_hull_pnts = np.vstack([hull_pnts, hull_pnts[0,:]])
         # The direction of all the edges
