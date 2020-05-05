@@ -14,17 +14,41 @@ class BoundingBox(object):
     def __init__(self, pnts):
         "Generates 2D or 3D bounding box around points"
         self.pnts = pnts
-        self.mean = 0. # Stores the mean of the points
-
+        self.mean = None # Stores the mean of the points
+        self.bases = None
+        self.axes = None
+        
         self.eps = 0.05 # Error term for deciding best bounding box
+        
+        self.bb3D = None
 
         self.pca2D = PCA(n_components=2)
         self.pca3D = PCA(n_components=3)
 
         self.pca2D.fit(pnts)
         self.pca3D.fit(pnts)
+    
+    def get_bounding_box(self, projection_indices, other_index, axis = None):
+        # Meiying
+        if not axis:
+            axis = self.pca3D.components_
+        print "pca3D is"
+        print self.pca3D.components_
+        print "axis is"
+        print axis
+        pnts = self._transform(axis[(projection_indices[0], projection_indices[1]), :]) # test and fix this
+        bb2D = self._mbb2D(pnts)
+        self.bb3D = self._inverse_pc_transform(bb2D, axis[other_index, :])
+        #self.axes = self._bounding_box_to_axis()
+        return self
+    
+    def bounding_box_to_normalized_axis(self):
+        # Meiying
+        # bb is 10 by 3. The 5th and 10th one is a repetition
+        unnormialzied_axis = self._bounding_box_to_axis()
+        return unnormialzied_axis / np.linalg.norm(unnormialzied_axis, axis=1, keepdims=True)    
 
-    def mbb2D(self, pnts):
+    def _mbb2D(self, pnts):
         """
         Project 3D to 2D along first PCs and then analytically
         fit best minimum bounding box.
@@ -84,73 +108,7 @@ class BoundingBox(object):
 
         return bb.T
 
-    def mbb2D_OLD(self):
-        """
-        Project 3D to 2D along first PCs and then analytically
-        fit best minimum bounding box.
-        """
-
-        pnts                = self.pca2D.transform(self.pnts) #TODO Transofrm for any arbitrary axis
-        hull_pnts           = pnts[ConvexHull(pnts).vertices]
-        connected_hull_pnts = np.vstack([hull_pnts, hull_pnts[0,:]])
-        # The direction of all the edges
-        edges = connected_hull_pnts[1:] - connected_hull_pnts[:-1]
-
-        b1 = normalize(edges, axis=1, norm='l2') # First axes
-        b2 = np.vstack([-b1[:,1], b1[:, 0]]).T # Orthonomral axes
-
-        print("b1 shape: {}, b2 shape: {}".format(b1.shape, b2.shape))
-        print("b1 and b2 orhtonormal?: {}".format(b1[4,:].dot(b2[4,:])))
-
-        # Get extremes along each axis
-        print("Hull pnts shape: ", hull_pnts.shape)
-        x = np.apply_along_axis(lambda col: np.array([col.min(), col.max()]),
-                                arr=hull_pnts.dot(b1.T),axis=0)
-        y = np.apply_along_axis(lambda col: np.array([col.min(), col.max()]),
-                                arr=hull_pnts.dot(b2.T),axis=0)
-
-
-        areas = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])
-        perimeters = abs((y[0, :] - y[1, :]) - (x[0, :] - x[1, :]))
-
-
-        print('Areas: {}'.format(sorted(areas)))
-
-        k_p = np.argmin(perimeters)
-        k_a = np.argmin(areas) # index of points with smallest bb area
-
-        area_ratio = areas[k_a] / areas[k_p]
-        print("Area ratio: {}".format(area_ratio))
-
-        # If the most square-like bounding box has a tolerably
-        # small area, we choose it, otherwise we choose box with smallest area.
-        if  area_ratio >  1.0 - self.eps:
-            k = k_p
-        else:
-            k = k_a
-
-        print("k_a: {}".format(k_a))
-        print("k_p: {}".format(k_p))
-        print("x shape: {} y shape: {}".format(x.shape, y.shape))
-
-        print(x[:, k])
-        print(y[:,k])
-
-        inverse_rot = np.vstack([b1[k,:], b2[k,:]]) # rotate back to orig coords
-
-        rot_bb = np.array([x[[0,1,1,0,0],k],
-                        y[[0,0,1,1,0],k]])
-
-        print("orig x and y range: {}".format(np.max(hull_pnts, axis=0) - np.min(hull_pnts, axis=0)))
-        print("bb x and y range: {}".format(np.max(rot_bb, axis=1) - np.min(rot_bb, axis=1)))
-        print(rot_bb)
-
-
-        bb = inverse_rot.T.dot(rot_bb) # rotate points back to orig frame
-
-        return bb.T
-
-    def _transform(self, pnts, components, norm=True):
+    def _transform(self, components, norm=True):
         """
         Projects @pnts onto @components bases.
         """
@@ -158,8 +116,8 @@ class BoundingBox(object):
         self.bases = components # Store bases in order to do inverse transform.
 
         if norm:
-            self.mean = pnts.mean(axis=0)
-            pnts -= self.mean
+            self.mean = self.pnts.mean(axis=0)
+            pnts = self.pnts - self.mean
 
         return np.dot(pnts, components.T)
 
@@ -181,7 +139,7 @@ class BoundingBox(object):
 
         # width_dir = b3 * pca3D.singular_values_[2] / 2
 
-        bb3D = self.pca2D.inverse_transform(bb2D) # to be updated?
+        bb3D = self._inverse_transform(bb2D) # to be updated?
 
         bb_side1 = bb3D + width_dir
         bb_side2 = bb3D - width_dir
@@ -190,34 +148,18 @@ class BoundingBox(object):
 
         return bb3D
 
-    def _bounding_box_to_normalized_axis(self, bb):
-        # Meiying
-        # bb is 10 by 3. The 5th and 10th one is a repetition
-        unnormialzied_axis = self._bounding_box_to_axis(bb)
-        return unnormialzied_axis / np.linalg.norm(unnormialzied_axis, axis=1, keepdims=True)
-
-    def _bounding_box_to_axis(self, bb):
+    def _bounding_box_to_axis(self):
         # Meiying
         # bb is 10 by 3. The 5th and 10th one is a repetition
         dtype = [('x', 'f8'), ('y', 'f8'), ('z', 'f8'), ('length', 'f8')]
-        axis_with_length = np.array([(bb[0, i], bb[1, i], bb[2, i], np.linalg.norm(bb[:, i])) for i in range(3)], dtype = dtype)
+        axis_with_length = np.array([(self.bb3D[0, i], self.bb3D[1, i], self.bb3D[2, i], np.linalg.norm(self.bb3D[:, i])) for i in range(3)], dtype = dtype)
         axis_with_length.sort(order = 'length')
         return axis_with_length[:, :3].T
 
-    def _get_bounding_box(self, pnts, axis, projection_indices, other_index):
-        # Meiying
-        pnts = self._transform(self.pca3D.components_[indices[(projection_indices, indices[projection_indices]), :]]) # test and fix this
-        bb2D = self.mbb2D(pnts)
-        bb3D = self._inverse_pc_transform(bb2D, self.pca3D.components_[other_index, :])
-        return bb3D
-
-    def _get_bounding_box_area(self, bounding_box):
+    def _volume(self, bounding_box):
         # Meiying
         axes = self._bounding_box_to_axis(bounding_box)
         return np.linalg.norm(axes[:, 0]) * np.linalg.norm(axes[:, 1]) * np.linalg.norm(axes[:, 2])
-
-    def _close_to(m, n, error=1e-6):
-        return m >= n - error and m <= n + error
 
     def _get_bounding_box_parameter(self, bounding_box):
         # Meiying
@@ -231,7 +173,7 @@ class BoundingBox(object):
         dtype = [('index', 'i4'), ('area', 'f8'), ('parameter', 'f8')]
         data = np.array([(i, self._get_bounding_box_area(boxes[:, :, i]), self._get_bounding_box_parameter(boxes[:, :, i])) for i in range(3)], dtype = dtype)
 
-        min_area_bbs = data[data['area'] < data['area'][0] * 1.05]
+        min_area_bbs = data[data['area'] < data['area'][0] * (1 + self.eps)]
         min_area_bbs.sort(order='parameter')
 
         index = min_area_bbs['index'][0]
@@ -291,8 +233,8 @@ class BoundingBox(object):
     def _visualize_point_cloud(self, fig, axis):
         axis.scatter(xs=self.pnts[:,0], ys=self.pnts[:,1], zs=self.pnts[:,2], c='b')
 
-    def _visualize_bounding_box(self, fig, axis, bb, color='r'):
-        ax.scatter(xs=bb[:,0], ys=bb[:,1], zs=bb[:,2], c=color, s=100)
+    def visualize_bounding_box(self, fig, axis, color='r'):
+        axis.scatter(xs=self.bb3D[:,0], ys=self.bb3D[:,1], zs=self.bb3D[:,2], c=color, s=100)
 
     def plot_bb(self, n="3D", ax=None):
         """Visualize points and bounding box"""
