@@ -75,14 +75,12 @@ class BoundingBox(object):
         rot_bb = np.array([x[[0,1,1,0,0],k],
                         y[[0,0,1,1,0],k]])
 
-        print("orig x and y range: {}".format(np.max(hull_pnts, axis=0) - np.min(hull_pnts, axis=0)))
-        print("bb x and y range: {}".format(np.max(rot_bb, axis=1) - np.min(rot_bb, axis=1)))
         print(rot_bb)
 
 
         bb = inverse_rot.T.dot(rot_bb) # rotate points back to orig frame
 
-        return bb.T
+        return bb.T, hull_pnts
 
     def mbb2D_OLD(self):
         """
@@ -309,16 +307,21 @@ class BoundingBox(object):
 
         elif n is "2D":
 
-            pnts = self._transform(self.pnts, self.pca2D.components_)
-            bb = self.mbb2D(pnts)
+            if components is None:
+                components = self.pca2D.components_[[0,1], :]
+
+            pnts = self._transform(self.pnts, components)
+            bb, hull_pnts = self.mbb2D(pnts)
             ax = fig.add_subplot(111)
 
             # pnts = self.pca2D.transform(self.pnts)
             ax.scatter(x=pnts[:, 0], y=pnts[:,1], c='b')
+            ax.scatter(x=hull_pnts[:,0], y=hull_pnts[:,1], c='g', s=500)
             ax.plot(bb[[0,1], 0], bb[[0,1],1],c='r')
             ax.plot(bb[[1,2], 0], bb[[1,2],1],c='r')
             ax.plot(bb[[2,3], 0], bb[[2,3],1],c='r')
             ax.plot(bb[[3,0], 0], bb[[3,0],1],c='r')
+
 
 
         plt.show()

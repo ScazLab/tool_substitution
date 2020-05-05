@@ -13,7 +13,7 @@ from scipy.spatial import ConvexHull
 FIGS_PATH = "./figs/"
 
 
-def bbs_to_img(bbs, fn, dims=(3,3)):
+def bbs_to_img(bbs, fn=None, dims=(3,3)):
     fig, ax = plt.subplots(figsize=dims)
 
     for bb in bbs:
@@ -57,6 +57,11 @@ class CompareTools(object):
         resized_img1 = self._normalize_contour(img_bw1, width)
         resized_img2 = self._normalize_contour(img_bw2, width)
 
+        cv2.imshow('tool1', resized_img1)
+        cv2.waitKey()
+        cv2.imshow('tool2', resized_img2)
+        cv2.waitKey()
+
         assert(resized_img1.shape == resized_img2.shape)
 
         contours1, h1   = cv2.findContours( resized_img1.copy(), cv2.RETR_LIST,
@@ -68,6 +73,10 @@ class CompareTools(object):
 
         shape1 = cv2.drawContours( blank.copy(), contours1, 0, 1, thickness=-1 )
         shape2 = cv2.drawContours( blank.copy(), contours2, 0, 1, thickness=-1 )
+        cv2.imshow('tool1', shape1)
+        cv2.waitKey()
+        cv2.imshow('tool2', shape2)
+        cv2.waitKey()
 
 
         shape1_area = np.count_nonzero(shape1)
