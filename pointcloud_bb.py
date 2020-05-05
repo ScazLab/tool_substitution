@@ -11,12 +11,12 @@ from scipy.spatial import ConvexHull
 
 class BoundingBox(object):
     """Creates bounding box around pointcloud data"""
-    def __init__(self, pnts):
+    def __init__(self, pnts, eps=0.05):
         "Generates 2D or 3D bounding box around points"
         self.pnts = pnts
         self.mean = 0. # Stores the mean of the points
 
-        self.eps = 0.05 # Error term for deciding best bounding box
+        self.eps = eps # Error term for deciding best bounding box
 
         self.pca2D = PCA(n_components=2)
         self.pca3D = PCA(n_components=3)
@@ -53,7 +53,7 @@ class BoundingBox(object):
 
         areas      = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])
         perimeters = abs(1.0 - ((y[0, :] - y[1, :]) / (x[0, :] - x[1, :])))
-        # Get indices of bbs with areas with in eps of smallest bb.
+        # Get indices of bbs with areas within eps of smallest bb.
         smallest_areas_idx = np.where(areas < (1.0 + self.eps) * np.min(areas))[0]
         smallest_perims = perimeters[smallest_areas_idx]
 
@@ -64,7 +64,6 @@ class BoundingBox(object):
         print("areas: {}".format(smallest_areas_idx))
 
         # print("k_a: {}".format(k_a))
-        print("k: {}".format(k))
         print("x shape: {} y shape: {}".format(x.shape, y.shape))
 
         print(x[:, k])
@@ -262,7 +261,8 @@ class BoundingBox(object):
         Estimate vertices of 3d bounding box using 2d bb and 3rd P.C.
         """
 
-        bb2D = self.mbb2D(self.pnts)
+        pnts_2d = self._transform(self.pnts, self.pca3D.components_[[0,1], :])
+        bb2D = self.mbb2D(pnts_2d)
 
         b3 = self.pca3D.components_[2,:] # 3rd PC
         b3 = b3 / np.linalg.norm(b3) # normalize
@@ -292,7 +292,7 @@ class BoundingBox(object):
     def _visualize_bounding_box(self, fig, axis, bb, color='r'):
         ax.scatter(xs=bb[:,0], ys=bb[:,1], zs=bb[:,2], c=color, s=100)
 
-    def plot_bb(self, n="3D", ax=None):
+    def plot_bb(self, n="3D", components=None):
         """Visualize points and bounding box"""
 
         

@@ -24,9 +24,9 @@ def guitar_bb():
     bb.plot_bb("3D")
 
 def hammer_bb():
-    pnts = get_hammer_points(7000)
-    bb = BoundingBox(pnts)
-    bb.plot_bb("2D")
+    pnts = get_hammer_points(70000)
+    bb = BoundingBox(pnts, eps=.001)
+    bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
     bb.plot_bb("3D")
 
 def saw_bb():
@@ -36,15 +36,15 @@ def saw_bb():
     bb.plot_bb("3D")
 
 def rake_bb():
-    pnts = get_rake_points(7000)
-    bb = BoundingBox(pnts)
+    pnts = get_rake_points(100000)
+    bb = BoundingBox(pnts, eps=0.2)
     bb.plot_bb("2D")
     bb.plot_bb("3D")
 
 def l_bb():
     pnts = get_l_points(7000)
     bb = BoundingBox(pnts)
-    bb.plot_bb("2D")
+    bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
     bb.plot_bb("3D")
 
 def plot_l_PC():
