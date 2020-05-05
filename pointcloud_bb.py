@@ -295,7 +295,8 @@ class BoundingBox(object):
     def plot_bb(self, n="3D", components=None):
         """Visualize points and bounding box"""
 
-        
+
+        fig = plt.figure()
 
         if n is "3D":
             # TODO: Connect vertices of 3D bounding box.
