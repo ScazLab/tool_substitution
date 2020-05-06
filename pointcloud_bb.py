@@ -6,8 +6,27 @@ import matplotlib.pyplot as plt
 
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, Delaunay
 
+def calc_hull_centroid(hull_pnts):
+    # Geometric mean
+    return np.mean(hull_pnts, axis=0)
+
+
+
+def _centroid_poly(poly):
+
+    T = Delaunay(poly).simplices
+    n = T.shape[0]
+    W = np.zeros(n)
+    C = 0
+
+    for m in range(n):
+        sp = poly[T[m,:],:]
+        W[m] = ConvexHull(sp).volume
+        C += W[m] +np.mean(sp, axis = 0)
+
+    return C / np.sum(W)
 
 class BoundingBox(object):
     """Creates bounding box around pointcloud data"""
@@ -52,15 +71,27 @@ class BoundingBox(object):
 
 
         areas      = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])
-        perimeters = abs(1.0 - ((y[0, :] - y[1, :]) / (x[0, :] - x[1, :])))
+        # perimeters = abs(1.0 - ((y[0, :] - y[1, :]) / (x[0, :] - x[1, :])))
+        centroids = np.vstack([x.sum(axis=0) / 2.0, y.sum(axis=0) / 2.0]).T # nx2 matrix
+        hull_centroid = calc_hull_centroid(hull_pnts)
+        # hull_centroid = _centroid_poly(hull_pnts)
+        centroid_dists = np.apply_along_axis(lambda row: np.linalg.norm(row-hull_centroid),
+                                             arr=centroids,
+                                             axis=1)
+
+        print(centroid_dists.shape)
+        k = np.argmin(centroid_dists)
         # Get indices of bbs with areas within eps of smallest bb.
         smallest_areas_idx = np.where(areas < (1.0 + self.eps) * np.min(areas))[0]
-        smallest_perims = perimeters[smallest_areas_idx]
+        top_centroids = centroid_dists[smallest_areas_idx]
 
-        k_p = np.argmin(smallest_perims)
-        k   = smallest_areas_idx[k_p]
+        k_c = np.argmax(top_centroids)
+        k  = smallest_areas_idx[k_c] 
 
-        print("k_p:{}".format(k_p))
+        # k_p = np.argmin(smallest_perims)
+        # k   = smallest_areas_idx[k_p]
+
+        # print("k_p:{}".format(k_p))
         print("areas: {}".format(smallest_areas_idx))
 
         # print("k_a: {}".format(k_a))
