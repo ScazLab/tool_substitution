@@ -66,6 +66,33 @@ class BoundingBox(object):
         bb_side2 = bb3D - width_dir
     
         self.bb3D = np.vstack([bb_side1, bb_side2])
+        
+    def get_axis(self):
+        """
+        return a 3 by 3 axis, and each axis is a row
+        It is ordered by the primary axis, secondary axis, and the third axis
+        """
+        print "get axis"
+        unnormalized_unordered_axis = [self.bb3D[0] - self.bb3D[1], self.bb3D[0] - self.bb3D[3], self.bb3D[0] - self.bb3D[5]]
+        print "unnormalized_unordered_axis"
+        print unnormalized_unordered_axis
+        
+        dtype = [('index', 'i4'), ('length', 'f8')]
+        data = np.array([(i, np.linalg.norm(unnormalized_unordered_axis[i])) for i in range(len(unnormalized_unordered_axis))], dtype = dtype)
+        data.sort(order='length')
+        
+        order = data['index']
+        unnormalized_ordered_axis = [unnormalized_unordered_axis[order[2]], unnormalized_unordered_axis[order[1]], unnormalized_unordered_axis[order[0]]]
+        print "unnormalized_ordered_axis"
+        print unnormalized_ordered_axis
+        
+        normalized_ordered_axis = [normalize_vector(i) for i in unnormalized_ordered_axis]
+        print "normalized_ordered_axis"
+        print normalized_ordered_axis        
+        
+        print "result"
+        print np.array(normalized_ordered_axis)
+        return np.array(normalized_ordered_axis)
     
     def bounding_box(self):
         return self.bb3D
@@ -101,7 +128,8 @@ class BoundingBox(object):
         combined_min_principle = combined_min_axis[0, 0]
         
         combined_axis = None
-        if close_to(combined_min_principle, 0, error=0.15) or close_to(abs(combined_min_principle), 1, error=0.15):
+        print "combined_min_principle: ", combined_min_principle
+        if close_to(combined_min_principle, 0, error=0.05) or close_to(abs(combined_min_principle), 1, error=0.05):
             #print("take original pca result")
             combined_axis = pca_axis.copy()
         else:
@@ -187,15 +215,13 @@ class BoundingBox(object):
         y = np.apply_along_axis(lambda col: np.array([col.min(), col.max()]),
                                     arr=hull_pnts.dot(b2.T),axis=0)
     
-        areas      = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])
+        areas      = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])      
         smallest_areas_idx = np.where(areas == np.min(areas))[0]
     
-        print "smallest_areas_idx: ", smallest_areas_idx
-    
-        x = b1[smallest_areas_idx, :][0]
-        y = b2[smallest_areas_idx, :][1]
+        x = b1[smallest_areas_idx[0], :]
+        y = b2[smallest_areas_idx[0], :]
 
-        return np.array([x, y])
+        return np.array([x, y]).T
     
     def visualize(self, n="3D"):
         """Visualize points and bounding box"""

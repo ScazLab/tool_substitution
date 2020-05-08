@@ -9,6 +9,7 @@ from sklearn.preprocessing import normalize
 from scipy.spatial import ConvexHull
 
 from bounding_box import BoundingBox
+from util import is_same_axis_matrix
 
 class ToolPointCloud(object):
     """Creates bounding box around pointcloud data"""
@@ -43,17 +44,27 @@ class ToolPointCloud(object):
         TODO: add correction
         """
         found_box = False
-        box = None
         current_axis = None
-
-        box_1 = BoundingBox(self.pnts)
-        box_1.set_axis(current_axis)
-        box_1.set_projection_axis([0, 1], 2)
-        box_1.calculate_bounding_box()
-        box_1.visualize("2D")
-        box_1.visualize("3D")
+        result_box = None
+        max_loop = 100
+        i = 0
         
-        return box_1.bounding_box()
+        while not found_box and i < max_loop:
+            is_finish_for_loop = True
+            #for [projection_axis_index, norm_axis_index] in [[[0, 1], 2]]:
+            for [projection_axis_index, norm_axis_index] in [[[0, 1], 2], [[0, 2], 1], [[1, 2], 0]]:
+                result_box = self._get_bb_helper(current_axis, projection_axis_index, norm_axis_index)
+                if current_axis is not None and not is_same_axis_matrix(box.get_axis(), current_axis):
+                    is_finish_for_loop = False
+                    current_axis = box.get_axis()
+                print "--------------------------------------------------"
+                
+            if is_finish_for_loop:
+                found_box = True
+                
+            i += 1
+
+        return result_box.bounding_box()
         
         #while not found_box:
             #box_1 = BoundingBox(self.pnts).get_bounding_box([0, 1], 2, current_axis)
@@ -69,6 +80,15 @@ class ToolPointCloud(object):
                 #current_axis = self._bounding_box_to_normalized_axis(box)
 
         #return box, self._bounding_box_to_axis(box)
+
+    def _get_bb_helper(self, axis, projection_axis_index, norm_axis_index):
+        box = BoundingBox(self.pnts)
+        box.set_axis(axis)
+        box.set_projection_axis(projection_axis_index, norm_axis_index)
+        box.calculate_bounding_box()
+        box.visualize("2D")
+        #box.visualize("3D")
+        return box
 
     def visualize(self):
         fig = plt.figure()

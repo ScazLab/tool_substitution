@@ -86,17 +86,17 @@ def test_hamming_dist():
 
 if __name__ == '__main__':
     hammer_bb()
-    guitar_bb()
-    saw_bb()
-    rake_bb()
-    l_bb()
-    if args.tool == 'hammer':
-        hammer_bb()
-    elif args.tool == 'saw':
-        saw_bb()
-    elif args.tool == 'guitar':
-        guitar_bb()
-    elif args.tool == 'rake':
-        rake_bb()
-    elif args.tool == 'L':
-        l_bb()
+    #guitar_bb()
+    #saw_bb()
+    #rake_bb()
+    #l_bb()
+    #if args.tool == 'hammer':
+        #hammer_bb()
+    #elif args.tool == 'saw':
+        #saw_bb()
+    #elif args.tool == 'guitar':
+        #guitar_bb()
+    #elif args.tool == 'rake':
+        #rake_bb()
+    #elif args.tool == 'L':
+        #l_bb()
