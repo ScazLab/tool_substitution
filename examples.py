@@ -1,51 +1,57 @@
 #!/usr/bin/env python
 
-import argparse
+#import argparse
 import cv2
 from compare_tools import bbs_to_img, CompareTools, FIGS_PATH
-from pointcloud_bb import BoundingBox
 
 from sample_points_from_stl import (get_guitar_points, get_man_points,
                                     get_hammer_points, get_saw_points,
                                     get_rake_points, get_l_points)
 
-parser = argparse.ArgumentParser()
-parser.add_argument("tool", type=str, default='hammer',
-                    help="Tool to create bounding box for. \
-                    Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
-args = parser.parse_args()
+from tool_pointcloud import ToolPointCloud
 
-
+#parser = argparse.ArgumentParser()
+#parser.add_argument("tool", type=str, default='hammer',
+                    #help="Tool to create bounding box for. \
+                    #Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
+#args = parser.parse_args()
 
 def guitar_bb():
     pnts = get_guitar_points(7000)
-    bb = BoundingBox(pnts)
-    bb.plot_bb("2D")
-    bb.plot_bb("3D")
+    point_cloud = ToolPointCloud(pnts)
+    point_cloud.bounding_box()     
+    #bb = BoundingBox(pnts)
+    #bb.plot_bb("2D")
+    #bb.plot_bb("3D")
 
 def hammer_bb():
-    pnts = get_hammer_points(70000)
-    bb = BoundingBox(pnts, eps=.001)
-    bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
-    bb.plot_bb("3D")
+    pnts = get_hammer_points(2000)
+    point_cloud = ToolPointCloud(pnts)
+    point_cloud.bounding_box()     
+    #bb = BoundingBox(pnts, eps=.01)
+    #bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
+    #bb.plot_bb("3D")
 
 def saw_bb():
-    pnts = get_saw_points(7000)
-    bb = BoundingBox(pnts)
-    bb.plot_bb("2D")
-    bb.plot_bb("3D")
+    pnts = get_saw_points(3000)
+    point_cloud = ToolPointCloud(pnts)
+    point_cloud.bounding_box() 
 
 def rake_bb():
-    pnts = get_rake_points(100000)
-    bb = BoundingBox(pnts, eps=0.2)
-    bb.plot_bb("2D")
-    bb.plot_bb("3D")
+    pnts = get_rake_points(7000)
+    point_cloud = ToolPointCloud(pnts)
+    point_cloud.bounding_box()     
+    #bb = BoundingBox(pnts, eps=0.2)
+    #bb.plot_bb("2D")
+    #bb.plot_bb("3D")
 
 def l_bb():
     pnts = get_l_points(7000)
-    bb = BoundingBox(pnts)
-    bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
-    bb.plot_bb("3D")
+    point_cloud = ToolPointCloud(pnts)
+    point_cloud.bounding_box()     
+    #bb = BoundingBox(pnts)
+    #bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
+    #bb.plot_bb("3D")
 
 def plot_l_PC():
     pnts = get_l_points(7000)
@@ -79,6 +85,11 @@ def test_hamming_dist():
     ct.hamming_distance('test_box.png', 'test_box.png', width=1000)
 
 if __name__ == '__main__':
+    hammer_bb()
+    guitar_bb()
+    saw_bb()
+    rake_bb()
+    l_bb()
     if args.tool == 'hammer':
         hammer_bb()
     elif args.tool == 'saw':

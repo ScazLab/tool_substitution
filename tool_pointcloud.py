@@ -10,15 +10,18 @@ from scipy.spatial import ConvexHull
 
 from bounding_box import BoundingBox
 
-def _close_to(m, n, error=1e-6):
-    return m >= n - error and m <= n + error
-
 class ToolPointCloud(object):
     """Creates bounding box around pointcloud data"""
     def __init__(self, pnts):
         "Point cloud of the tool"
         self.pnts = pnts
         self.eps = 0.05 # Error term for deciding best bounding box
+        self.mean = None
+        self._normalize_pointcloud()
+
+    def _normalize_pointcloud(self):
+        self.mean = self.pnts.mean(axis = 0)
+        self.pnts -= self.mean        
 
     def _is_same_bounding_boxes(self, bounding_boxes):
         return _close_to(np.linalg.norm(bounding_boxes - bounding_boxes[:, 0]), 0, error=-0.01)
@@ -34,15 +37,23 @@ class ToolPointCloud(object):
 
         return boxes[:, :, index]
 
-    def get_bounding_box(self):
-        # Meiying
+    def bounding_box(self):
+        """
+        get the bounding box of the point cloud
+        TODO: add correction
+        """
         found_box = False
         box = None
         current_axis = None
+
+        box_1 = BoundingBox(self.pnts)
+        box_1.set_axis(current_axis)
+        box_1.set_projection_axis([0, 1], 2)
+        box_1.calculate_bounding_box()
+        box_1.visualize("2D")
+        box_1.visualize("3D")
         
-        box_1 = BoundingBox(self.pnts).get_bounding_box([1, 2], 0, current_axis)
-        
-        return box_1
+        return box_1.bounding_box()
         
         #while not found_box:
             #box_1 = BoundingBox(self.pnts).get_bounding_box([0, 1], 2, current_axis)
@@ -59,5 +70,9 @@ class ToolPointCloud(object):
 
         #return box, self._bounding_box_to_axis(box)
 
-    def visualize_point_cloud(self, fig, axis):
-        axis.scatter(xs=self.pnts[:,0], ys=self.pnts[:,1], zs=self.pnts[:,2], c='b')
+    def visualize(self):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.axis('equal')
+        ax.scatter(xs=self.pnts[:,0], ys=self.pnts[:,1], zs=self.pnts[:,2], c='b')
+        plt.show()
