@@ -40,7 +40,8 @@ class CompareTools(object):
     def hamming_distance(self, img1_fn, img2_fn, width=300):
         """
         Similarity metric for two 2D shapes. Calculates the area of non-overlap
-        between two contours. The smaller the overlap, the more similar shapes are.
+        between two contours. The larger the overlap, the more similar shapes are.
+        Smaller score is better.
 
         """
 
@@ -54,8 +55,8 @@ class CompareTools(object):
         (thresh, img_bw2) = cv2.threshold(img2, 128, 255,
                                           cv2.THRESH_BINARY | cv2.THRESH_OTSU)
 
-        resized_img1 = self._normalize_contour(img_bw1, width)
-        resized_img2 = self._normalize_contour(img_bw2, width)
+        resized_img1, cs1, h1 = self._normalize_contour(img_bw1, width)
+        resized_img2, cs2, h2 = self._normalize_contour(img_bw2, width)
 
         cv2.imshow('tool1', resized_img1)
         cv2.waitKey()
@@ -64,21 +65,37 @@ class CompareTools(object):
 
         assert(resized_img1.shape == resized_img2.shape)
 
-        contours1, h1   = cv2.findContours( resized_img1.copy(), cv2.RETR_LIST,
+        # Get contours of the bounding boxes for resized imgs.
+        cs1, h1   = cv2.findContours( resized_img1.copy(), cv2.RETR_TREE,
                                         cv2.CHAIN_APPROX_SIMPLE )
-        contours2, h2   = cv2.findContours( resized_img2.copy(), cv2.RETR_LIST,
-                                        cv2.CHAIN_APPROX_SIMPLE )
+        cs2, h2   = cv2.findContours( resized_img2.copy(), cv2.RETR_TREE,
+                                        cv2.CHAIN_APPROX_SIMPLE)
 
         blank = np.zeros(img1.shape[0:2])
 
-        shape1 = cv2.drawContours( blank.copy(), contours1, 0, 1, thickness=-1 )
-        shape2 = cv2.drawContours( blank.copy(), contours2, 0, 1, thickness=-1 )
+        # Hierarchy keeps track of nested contours
+        h1 = h1[0] # Removes unnecessary outer list
+        h2 = h2[0]
+
+        # Removes external contour so only the tool shape is whited.
+        cs1 = [cs1[i] for i in range(len(cs1)) if h1[i][3] == 0]
+        cs2 = [cs2[i] for i in range(len(cs2)) if h2[i][3] == 0]
+
+
+        # -1 for all contours.
+        num_contours = -1
+        shape1 = cv2.drawContours( blank.copy(), cs1,  num_contours,
+                                   1, thickness=-1)
+        shape2 = cv2.drawContours( blank.copy(), cs2, num_contours,
+                                   color=1, thickness=-1)
+
         cv2.imshow('tool1', shape1)
         cv2.waitKey()
         cv2.imshow('tool2', shape2)
         cv2.waitKey()
 
 
+        # Shapes are drawn in white ( white == 1)
         shape1_area = np.count_nonzero(shape1)
         shape2_area = np.count_nonzero(shape2)
         print("shape 1 area: {} shape 2 area: {}".format(shape1_area, shape2_area))
@@ -103,4 +120,4 @@ class CompareTools(object):
         new_height = int((1.0 * img.shape[0])/img.shape[1] * width)
         img_resized = cv2.resize(img_cropped_bounding_rect, (width, new_height))
 
-        return img_resized
+        return img_resized, cnt, h
