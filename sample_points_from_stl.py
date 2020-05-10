@@ -73,7 +73,6 @@ def get_saw_points(n):
     # This gets only the points for the human figure modeled in this file
     return np.array([pnt for pnt in pnts if pnt[0] > 2200])
 
-
 def test_sampling(n, mesh):
 
     fig = plt.figure()

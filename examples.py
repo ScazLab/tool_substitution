@@ -16,42 +16,20 @@ from tool_pointcloud import ToolPointCloud
                     #Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
 #args = parser.parse_args()
 
-def guitar_bb():
-    pnts = get_guitar_points(7000)
-    point_cloud = ToolPointCloud(pnts)
-    point_cloud.bounding_box()     
-    #bb = BoundingBox(pnts)
-    #bb.plot_bb("2D")
-    #bb.plot_bb("3D")
+def guitar_pc():
+    return get_guitar_points(7000)
 
-def hammer_bb():
-    pnts = get_hammer_points(2000)
-    point_cloud = ToolPointCloud(pnts)
-    point_cloud.bounding_box()     
-    #bb = BoundingBox(pnts, eps=.01)
-    #bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
-    #bb.plot_bb("3D")
+def hammer_pc():
+    return get_hammer_points(2000)
 
-def saw_bb():
-    pnts = get_saw_points(3000)
-    point_cloud = ToolPointCloud(pnts)
-    point_cloud.bounding_box() 
+def saw_pc():
+    return get_saw_points(3000)
 
-def rake_bb():
-    pnts = get_rake_points(7000)
-    point_cloud = ToolPointCloud(pnts)
-    point_cloud.bounding_box()     
-    #bb = BoundingBox(pnts, eps=0.2)
-    #bb.plot_bb("2D")
-    #bb.plot_bb("3D")
+def rake_pc():
+    return get_rake_points(7000)
 
-def l_bb():
-    pnts = get_l_points(7000)
-    point_cloud = ToolPointCloud(pnts)
-    point_cloud.bounding_box()     
-    #bb = BoundingBox(pnts)
-    #bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
-    #bb.plot_bb("3D")
+def l_pc():
+    return get_l_points(7000)
 
 def plot_l_PC():
     pnts = get_l_points(7000)
@@ -85,18 +63,19 @@ def test_hamming_dist():
     ct.hamming_distance('test_box.png', 'test_box.png', width=1000)
 
 if __name__ == '__main__':
-    hammer_bb()
-    #guitar_bb()
-    #saw_bb()
-    #rake_bb()
-    #l_bb()
-    #if args.tool == 'hammer':
-        #hammer_bb()
-    #elif args.tool == 'saw':
-        #saw_bb()
-    #elif args.tool == 'guitar':
-        #guitar_bb()
-    #elif args.tool == 'rake':
-        #rake_bb()
-    #elif args.tool == 'L':
-        #l_bb()
+    tool_pc = None
+
+    if args.tool == 'hammer':
+        tool_pc = hammer_pc()
+    elif args.tool == 'saw':
+        tool_pc = saw_pc()
+    elif args.tool == 'guitar':
+        tool_pc = guitar_pc()
+    elif args.tool == 'rake':
+        tool_pc = rake_pc()
+    elif args.tool == 'L':
+        tool_pc = l_pc()
+    
+    if tool_pc is not None:
+        pc = ToolPointCloud(tool_pc)
+        pc.visualize_bb()
