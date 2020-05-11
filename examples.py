@@ -9,50 +9,68 @@ from sample_points_from_stl import (get_guitar_points, get_man_points,
                                     get_hammer_points, get_saw_points,
                                     get_rake_points, get_l_points)
 
+from tool_segmentation_example import compare_two_tools
+
+
 parser = argparse.ArgumentParser()
-parser.add_argument("tool", type=str, default='hammer',
+parser.add_argument("-t", type=str, default='hammer',
                     help="Tool to create bounding box for. \
+                    Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
+parser.add_argument("-H", nargs='+', type=str, default=[],
+                    help="Calc Hamming dist of two tools \
                     Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
 args = parser.parse_args()
 
 
 
-def guitar_bb():
-    pnts = get_guitar_points(7000)
-    bb = BoundingBox(pnts)
-    bb.plot_bb("2D")
-    bb.plot_bb("3D")
+def guitar_bb(n, eps, comps=[0,1]):
+    pnts = get_guitar_points(n)
+    bb = BoundingBox(pnts, eps)
 
-def hammer_bb():
-    pnts = get_hammer_points(70000)
+    c = bb.pca3D.components_[comps, :]
+
+    bb.plot_bb("2D", c)
+    bb.plot_bb("3D", c)
+
+def hammer_bb(n, eps, comps=[0,1]):
+    pnts = get_hammer_points(n)
     bb = BoundingBox(pnts, eps=.001)
-    bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
-    bb.plot_bb("3D")
+    c = bb.pca3D.components_[comps, :]
+    bb.plot_bb("2D", c)
+    bb.plot_bb("3D", c)
 
-def saw_bb():
-    pnts = get_saw_points(7000)
-    bb = BoundingBox(pnts)
-    bb.plot_bb("2D")
-    bb.plot_bb("3D")
+def saw_bb(n, eps, comps=[0,1]):
+    pnts = get_saw_points(n)
+    bb = BoundingBox(pnts, eps)
 
-def rake_bb():
-    pnts = get_rake_points(100000)
-    bb = BoundingBox(pnts, eps=0.2)
-    bb.plot_bb("2D")
-    bb.plot_bb("3D")
+    c = bb.pca3D.components_[comps, :]
+    bb.plot_bb("2D", c)
+    bb.plot_bb("3D", c)
 
-def l_bb():
-    pnts = get_l_points(7000)
-    bb = BoundingBox(pnts)
-    bb.plot_bb("2D", bb.pca3D.components_[[0,1], :])
-    bb.plot_bb("3D")
+def rake_bb(n, eps, comps=[0,1]):
+    pnts = get_rake_points(n)
+    bb = BoundingBox(pnts, eps, )
+
+    c = bb.pca3D.components_[comps, :]
+
+    bb.plot_bb("2D", c)
+    bb.plot_bb("3D", c)
+
+def l_bb(n, eps, comps=[0,1]):
+    pnts = get_l_points(n)
+    bb = BoundingBox(pnts, eps)
+
+    c = bb.pca3D.components_[comps, :]
+
+    bb.plot_bb("2D", bb.pca3D.components_[[1,2], :])
+    bb.plot_bb("3D", c)
 
 def plot_l_PC():
-    pnts = get_l_points(7000)
+    pnts = get_l_points(n)
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     pca = PCA(n_components=3)
-    new_pnts = pca.fit_transform(pnts)
+    new_pnts = pca.fit_transform(pnts, eps)
     ax.scatter(xs=new_pnts[:,0], ys=new_pnts[:,1], zs=new_pnts[:,2], c='b')
     plt.show()
 
@@ -79,13 +97,19 @@ def test_hamming_dist():
     ct.hamming_distance('test_box.png', 'test_box.png', width=1000)
 
 if __name__ == '__main__':
-    if args.tool == 'hammer':
-        hammer_bb()
-    elif args.tool == 'saw':
-        saw_bb()
-    elif args.tool == 'guitar':
-        guitar_bb()
-    elif args.tool == 'rake':
-        rake_bb()
-    elif args.tool == 'L':
-        l_bb()
+    k = 3
+    n = 9000
+    eps = 0.01
+    comps = [1, 2]
+    if args.t == 'hammer':
+        hammer_bb(n, eps, comps)
+    elif args.t == 'saw':
+        saw_bb(n, eps, comps)
+    elif args.t == 'guitar':
+        guitar_bb(n, eps, comps)
+    elif args.t == 'rake':
+        rake_bb(n, eps, comps)
+    elif args.t == 'L':
+        l_bb(n, eps, comps)
+    if args.H:
+        compare_two_tools(args.H[0], args.H[1], k=k)
