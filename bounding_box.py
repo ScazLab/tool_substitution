@@ -28,6 +28,9 @@ class BoundingBox(object):
     def get_bb(self):
         return self.bb
 
+    def get_pc(self):
+        return self.pnts
+
     def visualize(self):
         pass
 
@@ -193,7 +196,10 @@ class BoundingBox3D(BoundingBox):
         if self.norms is None:
             return
         return (self.norms[0] * self.norms[1] + self.norms[0] * self.norms[2] + self.norms[1] * self.norms[2]) * 2
-
+    
+    def get_2d_pc(self):
+        return self.bb2D.get_pc()
+    
     def set_axis(self, axis = None):
         """
         The axis should be n by 3 (each COLUMN is an axis)
