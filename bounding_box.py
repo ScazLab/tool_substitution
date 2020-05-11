@@ -197,8 +197,16 @@ class BoundingBox3D(BoundingBox):
             return 
         return (self.norms[0] * self.norms[1] + self.norms[0] * self.norms[2] + self.norms[1] * self.norms[2]) * 2
     
-    def get_2d_pc(self):
-        return self.bb2D.get_pc()
+    def bb_2d_projection(self, projection_index, norm_index, visualize=True):
+        print "in function"
+        projection_frame = self.normalized_axis[:, [projection_index[0], projection_index[1], norm_index]]
+        pnts_projection_frame = np.matmul(np.linalg.inv(projection_frame), self.pnts.T)
+        bb = BoundingBox2D(pnts_projection_frame[:-1, :].T)
+        if visualize:
+            print "visualize"
+            bb.visualize()
+        
+        return pnts_projection_frame, bb
     
     def set_axis(self, axis = None):
         """

@@ -63,19 +63,24 @@ def test_hamming_dist():
     ct.hamming_distance('test_box.png', 'test_box.png', width=1000)
 
 if __name__ == '__main__':
-    tool_pc = None
+    tool_pc = hammer_pc()
 
-    if args.tool == 'hammer':
-        tool_pc = hammer_pc()
-    elif args.tool == 'saw':
-        tool_pc = saw_pc()
-    elif args.tool == 'guitar':
-        tool_pc = guitar_pc()
-    elif args.tool == 'rake':
-        tool_pc = rake_pc()
-    elif args.tool == 'L':
-        tool_pc = l_pc()
+    #if args.tool == 'hammer':
+        #tool_pc = hammer_pc()
+    #elif args.tool == 'saw':
+        #tool_pc = saw_pc()
+    #elif args.tool == 'guitar':
+        #tool_pc = guitar_pc()
+    #elif args.tool == 'rake':
+        #tool_pc = rake_pc()
+    #elif args.tool == 'L':
+        #tool_pc = l_pc()
     
     if tool_pc is not None:
         pc = ToolPointCloud(tool_pc)
         pc.visualize_bb()
+        
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        pc.bb_2d_projection([0, 1], 2, visualize=True)
+        pc.bb_2d_projection([0, 2], 1, visualize=True)
+        pc.bb_2d_projection([1, 2], 0, visualize=True)

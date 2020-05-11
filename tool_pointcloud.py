@@ -21,6 +21,16 @@ class ToolPointCloud(object):
         self.bb = None
         self._normalize_pointcloud()
         self.bounding_box()
+    
+    def get_bb(self):
+        return self.bb
+    
+    def get_axis(self):
+        return self.bb.get_normalized_axis()
+    
+    def bb_2d_projection(self, projection_index, norm_index, visualize=True):
+        # returns both the pc and the 2D bb
+        return self.bb.bb_2d_projection(projection_index, norm_index, visualize)
 
     def _normalize_pointcloud(self):
         self.mean = self.pnts.mean(axis = 0)
@@ -65,7 +75,7 @@ class ToolPointCloud(object):
 
         print "final round: ", i
         print "current axis"
-        print current_axis  
+        print current_axis
 
     def _get_bb_helper(self, axis, projection_axis_index, norm_axis_index):
         box = BoundingBox3D(self.pnts)
