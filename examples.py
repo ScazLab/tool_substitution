@@ -16,8 +16,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-t", type=str, default='hammer',
                     help="Tool to create bounding box for. \
                     Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
-parser.add_argument("-H",
-                    help="Calc Hamming dist of two tools ")
+parser.add_argument("-H", type=int, default=3,
+                    help="Calc Hamming dist of two segmented tools. Takes num segments as arg. ")
 
 args = parser.parse_args()
 
@@ -49,7 +49,6 @@ def plot_l_PC():
 
 
 if __name__ == '__main__':
-    k = 3
     tool_pc = None
 
     if args.t == 'hammer':
@@ -67,8 +66,6 @@ if __name__ == '__main__':
     if tool_pc is not None:
         pc = ToolPointCloud(tool_pc)
         pc.visualize_bb()
-        
-        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++"
-        pc.bb_2d_projection([0, 1], 2, visualize=True)
-        pc.bb_2d_projection([0, 2], 1, visualize=True)
-        pc.bb_2d_projection([1, 2], 0, visualize=True)
+
+    if args.H:
+        compare_two_tools(k=args.H)
