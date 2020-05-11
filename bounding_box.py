@@ -18,31 +18,31 @@ class BoundingBox(object):
         self.unnormalized_axis = None
         self.norms = None # The norm of each axis
         self.eps = eps
-    
+
     def get_normalized_axis(self):
         return self.normalized_axis
-    
+
     def get_unnormalized_axis(self):
         return self.unnormalized_axis
-    
+
     def get_bb(self):
         return self.bb
-    
+
     def visualize(self):
         pass
-    
+
     def _calculate_axis(self):
         pass
-    
+
     def _get_bb_from_axis(self, axis):
         pass
-    
+
     def _order_unnormalized_axis_from_axis(self, unordered_axis):
         normalized_axis, norms = normalize(unordered_axis, norm='l2', axis=0, return_norm=True)
         sorted_index = get_sorted_index(norms, reverse_order=True)
-        
-        return unordered_axis[:, sorted_index], norms[sorted_index] 
-    
+
+        return unordered_axis[:, sorted_index], norms[sorted_index]
+
     def _get_unnormalized_axis_from_bounding_box(self, bb):
         """
         2 * 2 or 3 * 3, each column is an axis.
@@ -50,36 +50,36 @@ class BoundingBox(object):
         return: unnormalized_axis, norm
         """
         return None, None
-    
+
     def _get_unnormalized_axis_from_normalized_axis(self, axis):
         bb = self._get_bb_from_axis(axis)
         return self._get_unnormalized_axis_from_bounding_box(bb)
-    
+
     def _get_normalized_axis_from_unnormalized_axis(self, axis):
         bb = self._get_bb_from_axis(axis)
         return self._get_normalized_axis_from_bounding_box(bb)
-    
+
     def _get_normalized_axis_from_bounding_box(self, bb):
         unnormalized_axis, norm = self._get_unnormalized_axis_from_bounding_box(bb)
-        
+
         return normalize(unnormalized_axis, norm='l2', axis=0), norm
 
 class BoundingBox2D(BoundingBox):
     def __init__(self, pnts, eps=0.05):
         #super().__init__(pnts) # python 3 syntax
         super(BoundingBox2D, self).__init__(pnts, eps)
-        self._calculate_axis()    
-        
+        self._calculate_axis()
+
     def area(self):
         if self.norms is None:
             return
         return self.norms[0] * self.norms[1]
-    
+
     def perimeter(self):
         if self.norms is None:
-            return 
+            return
         return (self.norms[0] + self.norms[1]) * 2
-    
+
     def visualize(self):
         """Visualize points and bounding box"""
         if self.bb is None:
@@ -91,35 +91,35 @@ class BoundingBox2D(BoundingBox):
         ax.axis('equal')
 
         ax.scatter(x=self.pnts[:, 0], y=self.pnts[:, 1], c='b')
-            
+
         ax.scatter(x=self.bb[0, 0], y=self.bb[0, 1], c='r')
         ax.scatter(x=self.bb[1, 0], y=self.bb[1, 1], c='r')
         ax.scatter(x=self.bb[2, 0], y=self.bb[2, 1], c='r')
         ax.scatter(x=self.bb[3, 0], y=self.bb[3, 1], c='r')
 
-        ax.plot(self.bb.T[0], self.bb.T[1], c='r')            
+        ax.plot(self.bb.T[0], self.bb.T[1], c='r')
 
         plt.show()
-    
-    def _calculate_axis(self):        
+
+    def _calculate_axis(self):
         pca_axis = self._pca_axis()
         min_area_axis = self._min_area_axis()
-        
+
         pca_unnormalized, pca_norm = self._get_unnormalized_axis_from_normalized_axis(pca_axis)
         min_area_unnormalized, min_area_norm = self._get_unnormalized_axis_from_normalized_axis(min_area_axis)
         pca_area = pca_norm[0] * pca_norm[1]
         min_area_area = min_area_norm[0] * min_area_norm[1]
-        
+
         ratio =  pca_area / min_area_area
         #print "ratio: ", ratio
-        
+
         if close_to(ratio, 1, error=self.eps):
             print("take original pca result")
             self.normalized_axis = pca_axis.copy()
         else:
             print("choose new result")
             self.normalized_axis = min_area_axis.copy()
-        
+
         self.bb = self._get_bb_from_axis(self.normalized_axis)
         self.unnormalized_axis, self.norms = self._get_unnormalized_axis_from_bounding_box(self.bb)
 
@@ -128,47 +128,47 @@ class BoundingBox2D(BoundingBox):
         pca_2D.fit(self.pnts)
         pca_axis = pca_2D.components_
         return pca_axis.T # each column is an axis
-    
+
     def _min_area_axis(self):
         cv_rect = cv2.minAreaRect(np.array(self.pnts, dtype='f'))
         cv_box = cv2.boxPoints(cv_rect)
         x = cv_box[0] - cv_box[1]
         y = cv_box[0] - cv_box[3]
-        
+
         length_x = np.linalg.norm(x)
         length_y = np.linalg.norm(y)
-        
+
         primary_axis = None
         second_axis = None
-        
+
         if length_x > length_y:
             primary_axis, second_axis = x / length_x, y / length_y
         else:
             primary_axis, second_axis = y / length_y, x / length_x
-            
+
         axis = np.array([primary_axis, second_axis]).T
         return axis # each column is an axis
-    
+
     def _get_bb_from_axis(self, axis): # the axis could be normalized or not, could be ordered or not
         normalized_axis = normalize(axis, norm='l2', axis=0)
         projection = np.matmul(np.linalg.inv(normalized_axis), self.pnts.T)
-        
+
         projection_x = projection[0, :]
         projection_y = projection[1, :]
 
         project_x_min, project_x_max = np.min(projection_x), np.max(projection_x)
-        project_y_min, project_y_max = np.min(projection_y), np.max(projection_y) 
-    
+        project_y_min, project_y_max = np.min(projection_y), np.max(projection_y)
+
         projected_boundary = np.array([[project_x_min, project_y_min],
                                        [project_x_min, project_y_max],
                                        [project_x_max, project_y_max],
                                        [project_x_max, project_y_min],
                                        [project_x_min, project_y_min]])
-    
+
         bb = np.matmul(normalized_axis, projected_boundary.T).T # 5 by 2 matrix
 
         return bb
-    
+
     def _get_unnormalized_axis_from_bounding_box(self, bb):
         """ 2 * 2, each column is an axis. It is ordered by length, so that the first column is the primary axis."""
         axis_1 = np.array([bb[1] - bb[0]]).T
@@ -183,17 +183,17 @@ class BoundingBox3D(BoundingBox):
         super(BoundingBox3D, self).__init__(pnts, eps)
         self.projection_frame = None
         self.bb2D = None
-    
+
     def volumn(self):
         if self.norms is None:
             return
         return self.norms[0] * self.norms[1] * self.norms[2]
-    
+
     def surface_area(self):
         if self.norms is None:
-            return 
+            return
         return (self.norms[0] * self.norms[1] + self.norms[0] * self.norms[2] + self.norms[1] * self.norms[2]) * 2
-    
+
     def set_axis(self, axis = None):
         """
         The axis should be n by 3 (each COLUMN is an axis)
@@ -204,17 +204,17 @@ class BoundingBox3D(BoundingBox):
         else:
             self.normalized_axis, norm = self._get_normalized_axis_from_unnormalized_axis(axis)
         self.projection_frame = self.normalized_axis.copy()
-    
+
     def set_projection_axis(self, projection_index, norm_index):
         if len(projection_index) < 2:
             raise Exception("The number of projection indices should be >= 2")
         if self.projection_frame is None:
             raise Exception("Did not set the projection frame yet")
-        
+
         self.projection_frame = self.projection_frame[:, [projection_index[0], projection_index[1], norm_index]]
-        
+
         self._calculate_axis()
-    
+
     def visualize(self, n="3D"):
         """Visualize points and bounding box"""
 
@@ -225,16 +225,16 @@ class BoundingBox3D(BoundingBox):
 
             ax.scatter(xs=self.pnts[:,0], ys=self.pnts[:,1], zs=self.pnts[:,2], c='b')
             ax.scatter(xs=self.bb[:,0], ys=self.bb[:,1], zs=self.bb[:,2], c='r', s=100)
-            
+
             ax.plot(self.bb.T[0], self.bb.T[1], self.bb.T[2], c='r')
             ax.plot(self.bb[(1, 6), :].T[0], self.bb[(1, 6), :].T[1], self.bb[(1, 6), :].T[2], c='r')
             ax.plot(self.bb[(2, 7), :].T[0], self.bb[(2, 7), :].T[1], self.bb[(2, 7), :].T[2], c='r')
             ax.plot(self.bb[(3, 8), :].T[0], self.bb[(3, 8), :].T[1], self.bb[(3, 8), :].T[2], c='r')
-            
+
             plt.show()
         elif n is "2D":
             self.bb2D.visualize()
-    
+
     def _calculate_axis(self):
         # in axis, each column is an axis
         pnts_projection_frame = np.matmul(np.linalg.inv(self.projection_frame), self.pnts.T)
@@ -243,13 +243,13 @@ class BoundingBox3D(BoundingBox):
         bb2D_axis_projection_frame = self.bb2D.get_normalized_axis()
         bb2D_axis_projection_frame = np.vstack([bb2D_axis_projection_frame, np.array([0, 0])])
         bb2D_axis_world_frame = np.matmul(self.projection_frame, bb2D_axis_projection_frame)
-        
+
         axis = np.hstack([bb2D_axis_world_frame, np.array([self.projection_frame[:, 2]]).T])
-        
+
         self.bb = self._get_bb_from_axis(axis)
         self.unnormalized_axis, self.norms = self._get_unnormalized_axis_from_bounding_box(self.bb)
         self.normalized_axis, _ = self._get_normalized_axis_from_bounding_box(self.bb)
-        
+
     def _get_bb_from_axis(self, axis):
         normalized_axis = normalize(axis, norm='l2', axis=0)
         projection = np.matmul(np.linalg.inv(normalized_axis), self.pnts.T)
@@ -257,11 +257,11 @@ class BoundingBox3D(BoundingBox):
         projection_x = projection[0, :]
         projection_y = projection[1, :]
         projection_z = projection[2, :]
-    
+
         project_x_min, project_x_max = np.min(projection_x), np.max(projection_x)
-        project_y_min, project_y_max = np.min(projection_y), np.max(projection_y) 
-        project_z_min, project_z_max = np.min(projection_z), np.max(projection_z) 
-    
+        project_y_min, project_y_max = np.min(projection_y), np.max(projection_y)
+        project_z_min, project_z_max = np.min(projection_z), np.max(projection_z)
+
         projected_boundary = np.array([[project_x_min, project_y_min, project_z_max],
                                        [project_x_min, project_y_max, project_z_max],
                                        [project_x_max, project_y_max, project_z_max],
@@ -272,11 +272,11 @@ class BoundingBox3D(BoundingBox):
                                        [project_x_max, project_y_max, project_z_min],
                                        [project_x_max, project_y_min, project_z_min],
                                        [project_x_min, project_y_min, project_z_min]])
-    
+
         bb = np.matmul(normalized_axis, projected_boundary.T).T # 10 by 2 matrix
-        
+
         return bb
-    
+
     def _get_unnormalized_axis_from_bounding_box(self, bb):
         """
         2 * 2, each column is an axis.
@@ -287,4 +287,4 @@ class BoundingBox3D(BoundingBox):
         axis_2 = np.array([bb[3] - bb[0]]).T
         axis_3 = np.array([bb[5] - bb[0]]).T
         unnormalized_unordered_axis = np.hstack([axis_1, axis_2, axis_3])
-        return self._order_unnormalized_axis_from_axis(unnormalized_unordered_axis)  
+        return self._order_unnormalized_axis_from_axis(unnormalized_unordered_axis)
