@@ -67,6 +67,8 @@ if __name__ == '__main__':
     if tool_pc is not None:
         pc = ToolPointCloud(tool_pc)
         pc.visualize_bb()
-
-    if args.H:
-        compare_two_tools(k=k)
+        
+        print "+++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+        pc.bb_2d_projection([0, 1], 2, visualize=True)
+        pc.bb_2d_projection([0, 2], 1, visualize=True)
+        pc.bb_2d_projection([1, 2], 0, visualize=True)
