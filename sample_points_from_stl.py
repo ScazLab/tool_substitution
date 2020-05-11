@@ -73,7 +73,6 @@ def get_saw_points(n):
     # This gets only the points for the human figure modeled in this file
     return np.array([pnt for pnt in pnts if pnt[0] > 2200])
 
-
 def test_sampling(n, mesh):
 
     fig = plt.figure()
@@ -95,18 +94,28 @@ def get_rake_points(n):
 
 
 def get_l_points(n):
+    #rect1 = np.random.uniform(0,3, size=(n,3))
+    #rect1[:, 2] = 0.0
+    #rect2 = np.random.uniform(0,3, size=(n,3))
+    ##rect2[np.where(rect2[:,2] > 2.0)] = 2.
+    ##rect2[np.where(rect2[:,1] > 2.0)] = 2.
+    ##rect1[np.where(rect1[:,1] > 2.0)] = 1.
+    ## rect2[np.where(rect2[:,1] > 2.0)] = 2.
+    #rect2[:, 0] = 0.0
+    ## rect2 = rect1.dot(Ry).dot(Rx).dot(Rz) - [-10,0,0]
     
-    rect1 = np.random.uniform(0,3, size=(n,3))
-    rect1[:, 2] = 0.0
-    rect2 = np.random.uniform(0,3, size=(n,3))
-    rect2[np.where(rect2[:,2] > 2.0)] = 2.
-    rect2[np.where(rect2[:,1] > 2.0)] = 2.
-    rect1[np.where(rect1[:,1] > 2.0)] = 1.
-    # rect2[np.where(rect2[:,1] > 2.0)] = 2.
-    rect2[:, 0] = 0.0
-    # rect2 = rect1.dot(Ry).dot(Rx).dot(Rz) - [-10,0,0]
+    rect1_x = np.random.uniform(-1, 0, size=(n, ))
+    rect1_y = np.random.uniform(0, 3, size=(n, ))
+    rect1_z = np.random.uniform(0, 2, size=(n, ))
+    rect1 = np.array([rect1_x, rect1_y, rect1_z]).T
+    
+    rect2_x = np.random.uniform(-1, 4, size=(n, ))
+    rect2_y = np.random.uniform(-1, 0, size=(n, ))
+    rect2_z = np.random.uniform(0, 2, size=(n, ))
+    rect2 = np.array([rect2_x, rect2_y, rect2_z]).T
 
     return np.vstack([rect1, rect2])
+
 def plot_pnts(pnts):
 
     fig = plt.figure()

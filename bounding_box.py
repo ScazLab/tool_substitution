@@ -8,259 +8,283 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import normalize
 from scipy.spatial import ConvexHull
 
+from util import normalize_vector, close_to, get_sorted_index, is_2d_point_cloud_overlap
 
 class BoundingBox(object):
-    """Creates bounding box around pointcloud data"""
-    def __init__(self, pnts):
-        "Generates 2D or 3D bounding box around points"
-        self.pnts = pnts
-        self.mean = None # Stores the mean of the points
-        self.bases = None
-        self.axes = None
-        
-        self.eps = 0.05 # Error term for deciding best bounding box
-        
-        self.bb3D = None
-
-        self.pca2D = PCA(n_components=2)
-        self.pca3D = PCA(n_components=3)
-
-        self.pca2D.fit(pnts)
-        self.pca3D.fit(pnts)
+    def __init__(self, pnts, eps=0.05):
+        self.pnts = pnts # pnts is a n by 2 or 3 matrix.
+        self.bb = None # bb reprsentes a bounding box. It is a a 5 or 10 by 2 or 3 matrix. Each row is a point. For a 2D bounding box, the 5th is the same as the 1st point. For a 3D bounding box, 5th=1st, and 10th=6th.
+        self.normalized_axis = None # axis is a homogeneous  matrix. Each COLUMN is a basis
+        self.unnormalized_axis = None
+        self.norms = None # The norm of each axis
+        self.eps = eps
     
-    def get_bounding_box(self, projection_indices, other_index, axis = None):
-        # Meiying
-        if not axis:
-            axis = self.pca3D.components_
-        print "pca3D is"
-        print self.pca3D.components_
-        print "axis is"
-        print axis
-        pnts = self._transform(axis[(projection_indices[0], projection_indices[1]), :]) # test and fix this
-        bb2D = self._mbb2D(pnts)
-        self.bb3D = self._inverse_pc_transform(bb2D, axis[other_index, :])
-        #self.axes = self._bounding_box_to_axis()
-        return self
+    def get_normalized_axis(self):
+        return self.normalized_axis
     
-    def bounding_box_to_normalized_axis(self):
-        # Meiying
-        # bb is 10 by 3. The 5th and 10th one is a repetition
-        unnormialzied_axis = self._bounding_box_to_axis()
-        return unnormialzied_axis / np.linalg.norm(unnormialzied_axis, axis=1, keepdims=True)    
-
-    def _mbb2D(self, pnts):
+    def get_unnormalized_axis(self):
+        return self.unnormalized_axis
+    
+    def get_bb(self):
+        return self.bb
+    
+    def visualize(self):
+        pass
+    
+    def _calculate_axis(self):
+        pass
+    
+    def _get_bb_from_axis(self, axis):
+        pass
+    
+    def _order_unnormalized_axis_from_axis(self, unordered_axis):
+        normalized_axis, norms = normalize(unordered_axis, norm='l2', axis=0, return_norm=True)
+        sorted_index = get_sorted_index(norms, reverse_order=True)
+        
+        return unordered_axis[:, sorted_index], norms[sorted_index] 
+    
+    def _get_unnormalized_axis_from_bounding_box(self, bb):
         """
-        Project 3D to 2D along first PCs and then analytically
-        fit best minimum bounding box.
-
-        @pnts: A 2D set of points.
+        2 * 2 or 3 * 3, each column is an axis.
+        It is ordered by length, so that the first column is the primary axis.
+        return: unnormalized_axis, norm
         """
+        return None, None
+    
+    def _get_unnormalized_axis_from_normalized_axis(self, axis):
+        bb = self._get_bb_from_axis(axis)
+        return self._get_unnormalized_axis_from_bounding_box(bb)
+    
+    def _get_normalized_axis_from_unnormalized_axis(self, axis):
+        bb = self._get_bb_from_axis(axis)
+        return self._get_normalized_axis_from_bounding_box(bb)
+    
+    def _get_normalized_axis_from_bounding_box(self, bb):
+        unnormalized_axis, norm = self._get_unnormalized_axis_from_bounding_box(bb)
+        
+        return normalize(unnormalized_axis, norm='l2', axis=0), norm
 
-        hull_pnts           = pnts[ConvexHull(pnts).vertices]
-        connected_hull_pnts = np.vstack([hull_pnts, hull_pnts[0,:]])
-        # The direction of all the edges
-        edges = connected_hull_pnts[1:] - connected_hull_pnts[:-1]
-
-        b1 = normalize(edges, axis=1, norm='l2') # First axes
-        b2 = np.vstack([-b1[:,1], b1[:, 0]]).T # Orthonomral axes
-
-        print("b1 shape: {}, b2 shape: {}".format(b1.shape, b2.shape))
-        # print("b1 and b2 orhtonormal?: {}".format(b1[4,:].dot(b2[4,:])))
-
-        # Get extremes along each axis
-        print("Hull pnts shape: ", hull_pnts.shape)
-        x = np.apply_along_axis(lambda col: np.array([col.min(), col.max()]),
-                                arr=hull_pnts.dot(b1.T),axis=0)
-        y = np.apply_along_axis(lambda col: np.array([col.min(), col.max()]),
-                                arr=hull_pnts.dot(b2.T),axis=0)
-
-
-        areas      = (y[0, :] - y[1, :]) * (x[0, :] - x[1, :])
-        perimeters = abs(1.0 - ((y[0, :] - y[1, :]) / (x[0, :] - x[1, :])))
-        # Get indices of bbs with areas with in eps of smallest bb.
-        smallest_areas_idx = np.where(areas < (1.0 + self.eps) * np.min(areas))[0]
-        smallest_perims = perimeters[smallest_areas_idx]
-
-        k_p = np.argmin(smallest_perims)
-        k   = smallest_areas_idx[k_p]
-
-        print("k_p:{}".format(k_p))
-        print("areas: {}".format(smallest_areas_idx))
-
-        # print("k_a: {}".format(k_a))
-        print("k: {}".format(k))
-        print("x shape: {} y shape: {}".format(x.shape, y.shape))
-
-        print(x[:, k])
-        print(y[:,k])
-
-        inverse_rot = np.vstack([b1[k,:], b2[k,:]]) # rotate back to orig coords
-
-        rot_bb = np.array([x[[0,1,1,0,0],k],
-                        y[[0,0,1,1,0],k]])
-
-        print("orig x and y range: {}".format(np.max(hull_pnts, axis=0) - np.min(hull_pnts, axis=0)))
-        print("bb x and y range: {}".format(np.max(rot_bb, axis=1) - np.min(rot_bb, axis=1)))
-        print(rot_bb)
-
-
-        bb = inverse_rot.T.dot(rot_bb) # rotate points back to orig frame
-
-        return bb.T
-
-    def _transform(self, components, norm=True):
-        """
-        Projects @pnts onto @components bases.
-        """
-
-        self.bases = components # Store bases in order to do inverse transform.
-
-        if norm:
-            self.mean = self.pnts.mean(axis=0)
-            pnts = self.pnts - self.mean
-
-        return np.dot(pnts, components.T)
-
-    def _inverse_transform(self, pnts):
-
-        return np.dot(pnts, self.bases) + self.mean
-
-    def _inverse_pc_transform(self, bb2D, b3):
-        # Meiying
-        b3 = b3 / np.linalg.norm(b3) # normalize
-
-        pnts_1d = self.pnts.dot(b3)
-
-        # initial 2D bb is located in the center of the point cloud.
-        # We want to copy it and shift both in the directions of 3rd PC
-
-        width = pnts_1d.max()  - pnts_1d.min()
-        width_dir = b3 * width / 2.0 # This tells us how to translate points
-
-        # width_dir = b3 * pca3D.singular_values_[2] / 2
-
-        bb3D = self._inverse_transform(bb2D) # to be updated?
-
-        bb_side1 = bb3D + width_dir
-        bb_side2 = bb3D - width_dir
-
-        bb3D = np.vstack([bb_side1, bb_side2])
-
-        return bb3D
-
-    def _bounding_box_to_axis(self):
-        # Meiying
-        # bb is 10 by 3. The 5th and 10th one is a repetition
-        dtype = [('x', 'f8'), ('y', 'f8'), ('z', 'f8'), ('length', 'f8')]
-        axis_with_length = np.array([(self.bb3D[0, i], self.bb3D[1, i], self.bb3D[2, i], np.linalg.norm(self.bb3D[:, i])) for i in range(3)], dtype = dtype)
-        axis_with_length.sort(order = 'length')
-        return axis_with_length[:, :3].T
-
-    def _volume(self, bounding_box):
-        # Meiying
-        axes = self._bounding_box_to_axis(bounding_box)
-        return np.linalg.norm(axes[:, 0]) * np.linalg.norm(axes[:, 1]) * np.linalg.norm(axes[:, 2])
-
-    def _get_bounding_box_parameter(self, bounding_box):
-        # Meiying
-        axes = self._bounding_box_to_axis(bounding_box)
-        return 2 * (np.linalg.norm(axes[:, 0]) + np.linalg.norm(axes[:, 1]) + np.linalg.norm(axes[:, 2]))
-
-    def _is_same_bounding_boxes(self, bounding_boxes):
-        self._close_to(np.linalg.norm(bounding_boxes - bounding_boxes[:, 0]), 0, error=-0.01)
-
-    def _choose_bounding_box(self, boxes):
-        dtype = [('index', 'i4'), ('area', 'f8'), ('parameter', 'f8')]
-        data = np.array([(i, self._get_bounding_box_area(boxes[:, :, i]), self._get_bounding_box_parameter(boxes[:, :, i])) for i in range(3)], dtype = dtype)
-
-        min_area_bbs = data[data['area'] < data['area'][0] * (1 + self.eps)]
-        min_area_bbs.sort(order='parameter')
-
-        index = min_area_bbs['index'][0]
-
-        return boxes[:, :, index]
-
-    def main(self):
-        # Meiying
-        found_box = False
-        box = None
-        #current_axis = [self.pca3D.components_[0,:], self.pca3D.components_[1,:], self.pca3D.components_[2,:]]
-        while not found_box:
-            box_1 = self._get_bounding_box(current_axis, [0, 1], 2)
-            box_2 = self._get_bounding_box(current_axis, [0, 2], 1)
-            box_3 = self._get_bounding_box(current_axis, [1, 2], 0)
-            boxes = np.array([box_1, box_2, box_3])
-            found_box = self._is_same_bounding_boxes(boxes)
-            if found_box:
-                found_box = True
-                box = np.mean(boxes, axis=3) # test and fix This
-            else:
-                box = self._choose_bounding_box(boxes)
-                current_axis = self._bounding_box_to_normalized_axis(box)
-
-        return box, self._bounding_box_to_axis(box)
-
-
-    def mbb3D(self):
-        """
-        Estimate vertices of 3d bounding box using 2d bb and 3rd P.C.
-        """
-
-        bb2D = self.mbb2D(self.pnts)
-
-        b3 = self.pca3D.components_[2,:] # 3rd PC
-        b3 = b3 / np.linalg.norm(b3) # normalize
-
-        pnts_1d = self.pnts.dot(b3)
-
-        # initial 2D bb is located in the center of the point cloud.
-        # We want to copy it and shift both in the directions of 3rd PC
-
-        width = pnts_1d.max()  - pnts_1d.min()
-        width_dir = b3 * width / 2.0 # This tells us how to translate points
-
-        # width_dir = b3 * pca3D.singular_values_[2] / 2
-
-        bb3D = self.pca2D.inverse_transform(bb2D)
-
-        bb_side1 = bb3D + width_dir
-        bb_side2 = bb3D - width_dir
-
-        bb3D = np.vstack([bb_side1, bb_side2])
-
-        return bb3D
-
-    def _visualize_point_cloud(self, fig, axis):
-        axis.scatter(xs=self.pnts[:,0], ys=self.pnts[:,1], zs=self.pnts[:,2], c='b')
-
-    def visualize_bounding_box(self, fig, axis, color='r'):
-        axis.scatter(xs=self.bb3D[:,0], ys=self.bb3D[:,1], zs=self.bb3D[:,2], c=color, s=100)
-
-    def plot_bb(self, n="3D", ax=None):
+class BoundingBox2D(BoundingBox):
+    def __init__(self, pnts, eps=0.05):
+        #super().__init__(pnts) # python 3 syntax
+        super(BoundingBox2D, self).__init__(pnts, eps)
+        self._calculate_axis()    
+        
+    def area(self):
+        if self.norms is None:
+            return
+        return self.norms[0] * self.norms[1]
+    
+    def perimeter(self):
+        if self.norms is None:
+            return 
+        return (self.norms[0] + self.norms[1]) * 2
+    
+    def visualize(self):
         """Visualize points and bounding box"""
+        if self.bb is None:
+            return
 
-        
+        fig = plt.figure()
 
-        if n is "3D":
-            # TODO: Connect vertices of 3D bounding box.
+        ax = fig.add_subplot(111)
+        ax.axis('equal')
 
-            ax = fig.add_subplot(111, projection='3d')
-            bb = self.mbb3D()
-            ax.scatter(xs=self.pnts[:,0], ys=self.pnts[:,1], zs=self.pnts[:,2], c='b')
-            ax.scatter(xs=bb[:,0], ys=bb[:,1], zs=bb[:,2], c='r', s=100)
+        ax.scatter(x=self.pnts[:, 0], y=self.pnts[:, 1], c='b')
+            
+        ax.scatter(x=self.bb[0, 0], y=self.bb[0, 1], c='r')
+        ax.scatter(x=self.bb[1, 0], y=self.bb[1, 1], c='r')
+        ax.scatter(x=self.bb[2, 0], y=self.bb[2, 1], c='r')
+        ax.scatter(x=self.bb[3, 0], y=self.bb[3, 1], c='r')
 
-        elif n is "2D":
-
-            pnts = self._transform(self.pnts, self.pca2D.components_)
-            bb = self.mbb2D(pnts)
-            ax = fig.add_subplot(111)
-
-            # pnts = self.pca2D.transform(self.pnts)
-            ax.scatter(x=pnts[:, 0], y=pnts[:,1], c='b')
-            ax.plot(bb[[0,1], 0], bb[[0,1],1],c='r')
-            ax.plot(bb[[1,2], 0], bb[[1,2],1],c='r')
-            ax.plot(bb[[2,3], 0], bb[[2,3],1],c='r')
-            ax.plot(bb[[3,0], 0], bb[[3,0],1],c='r')
-
+        ax.plot(self.bb.T[0], self.bb.T[1], c='r')            
 
         plt.show()
+    
+    def _calculate_axis(self):        
+        pca_axis = self._pca_axis()
+        min_area_axis = self._min_area_axis()
+        
+        pca_unnormalized, pca_norm = self._get_unnormalized_axis_from_normalized_axis(pca_axis)
+        min_area_unnormalized, min_area_norm = self._get_unnormalized_axis_from_normalized_axis(min_area_axis)
+        pca_area = pca_norm[0] * pca_norm[1]
+        min_area_area = min_area_norm[0] * min_area_norm[1]
+        
+        ratio =  pca_area / min_area_area
+        #print "ratio: ", ratio
+        
+        if close_to(ratio, 1, error=self.eps):
+            print("take original pca result")
+            self.normalized_axis = pca_axis.copy()
+        else:
+            print("choose new result")
+            self.normalized_axis = min_area_axis.copy()
+        
+        self.bb = self._get_bb_from_axis(self.normalized_axis)
+        self.unnormalized_axis, self.norms = self._get_unnormalized_axis_from_bounding_box(self.bb)
+
+    def _pca_axis(self):
+        pca_2D = PCA(n_components=2)
+        pca_2D.fit(self.pnts)
+        pca_axis = pca_2D.components_
+        return pca_axis.T # each column is an axis
+    
+    def _min_area_axis(self):
+        cv_rect = cv2.minAreaRect(np.array(self.pnts, dtype='f'))
+        cv_box = cv2.boxPoints(cv_rect)
+        x = cv_box[0] - cv_box[1]
+        y = cv_box[0] - cv_box[3]
+        
+        length_x = np.linalg.norm(x)
+        length_y = np.linalg.norm(y)
+        
+        primary_axis = None
+        second_axis = None
+        
+        if length_x > length_y:
+            primary_axis, second_axis = x / length_x, y / length_y
+        else:
+            primary_axis, second_axis = y / length_y, x / length_x
+            
+        axis = np.array([primary_axis, second_axis]).T
+        return axis # each column is an axis
+    
+    def _get_bb_from_axis(self, axis): # the axis could be normalized or not, could be ordered or not
+        normalized_axis = normalize(axis, norm='l2', axis=0)
+        projection = np.matmul(np.linalg.inv(normalized_axis), self.pnts.T)
+        
+        projection_x = projection[0, :]
+        projection_y = projection[1, :]
+
+        project_x_min, project_x_max = np.min(projection_x), np.max(projection_x)
+        project_y_min, project_y_max = np.min(projection_y), np.max(projection_y) 
+    
+        projected_boundary = np.array([[project_x_min, project_y_min],
+                                       [project_x_min, project_y_max],
+                                       [project_x_max, project_y_max],
+                                       [project_x_max, project_y_min],
+                                       [project_x_min, project_y_min]])
+    
+        bb = np.matmul(normalized_axis, projected_boundary.T).T # 5 by 2 matrix
+
+        return bb
+    
+    def _get_unnormalized_axis_from_bounding_box(self, bb):
+        """ 2 * 2, each column is an axis. It is ordered by length, so that the first column is the primary axis."""
+        axis_1 = np.array([bb[1] - bb[0]]).T
+        axis_2 = np.array([bb[3] - bb[0]]).T
+        unnormalized_unordered_axis = np.hstack([axis_1, axis_2])
+        return self._order_unnormalized_axis_from_axis(unnormalized_unordered_axis)
+
+class BoundingBox3D(BoundingBox):
+    """Creates bounding box around pointcloud data"""
+    def __init__(self, pnts, eps=0.05):
+        "Generates 3D bounding box around points"
+        super(BoundingBox3D, self).__init__(pnts, eps)
+        self.projection_frame = None
+        self.bb2D = None
+    
+    def volumn(self):
+        if self.norms is None:
+            return
+        return self.norms[0] * self.norms[1] * self.norms[2]
+    
+    def surface_area(self):
+        if self.norms is None:
+            return 
+        return (self.norms[0] * self.norms[1] + self.norms[0] * self.norms[2] + self.norms[1] * self.norms[2]) * 2
+    
+    def set_axis(self, axis = None):
+        """
+        The axis should be n by 3 (each COLUMN is an axis)
+        """
+        if axis is None:
+            pca = PCA(n_components=3)
+            self.normalized_axis = pca.fit(self.pnts).components_.T # each column is an axis
+        else:
+            self.normalized_axis, norm = self._get_normalized_axis_from_unnormalized_axis(axis)
+        self.projection_frame = self.normalized_axis.copy()
+    
+    def set_projection_axis(self, projection_index, norm_index):
+        if len(projection_index) < 2:
+            raise Exception("The number of projection indices should be >= 2")
+        if self.projection_frame is None:
+            raise Exception("Did not set the projection frame yet")
+        
+        self.projection_frame = self.projection_frame[:, [projection_index[0], projection_index[1], norm_index]]
+        
+        self._calculate_axis()
+    
+    def visualize(self, n="3D"):
+        """Visualize points and bounding box"""
+
+        if n is "3D":
+            fig = plt.figure()
+            ax = fig.add_subplot(111, projection='3d')
+            ax.axis('equal')
+
+            ax.scatter(xs=self.pnts[:,0], ys=self.pnts[:,1], zs=self.pnts[:,2], c='b')
+            ax.scatter(xs=self.bb[:,0], ys=self.bb[:,1], zs=self.bb[:,2], c='r', s=100)
+            
+            ax.plot(self.bb.T[0], self.bb.T[1], self.bb.T[2], c='r')
+            ax.plot(self.bb[(1, 6), :].T[0], self.bb[(1, 6), :].T[1], self.bb[(1, 6), :].T[2], c='r')
+            ax.plot(self.bb[(2, 7), :].T[0], self.bb[(2, 7), :].T[1], self.bb[(2, 7), :].T[2], c='r')
+            ax.plot(self.bb[(3, 8), :].T[0], self.bb[(3, 8), :].T[1], self.bb[(3, 8), :].T[2], c='r')
+            
+            plt.show()
+        elif n is "2D":
+            self.bb2D.visualize()
+    
+    def _calculate_axis(self):
+        # in axis, each column is an axis
+        pnts_projection_frame = np.matmul(np.linalg.inv(self.projection_frame), self.pnts.T)
+
+        self.bb2D = BoundingBox2D(pnts_projection_frame[:-1, :].T)
+        bb2D_axis_projection_frame = self.bb2D.get_normalized_axis()
+        bb2D_axis_projection_frame = np.vstack([bb2D_axis_projection_frame, np.array([0, 0])])
+        bb2D_axis_world_frame = np.matmul(self.projection_frame, bb2D_axis_projection_frame)
+        
+        axis = np.hstack([bb2D_axis_world_frame, np.array([self.projection_frame[:, 2]]).T])
+        
+        self.bb = self._get_bb_from_axis(axis)
+        self.unnormalized_axis, self.norms = self._get_unnormalized_axis_from_bounding_box(self.bb)
+        self.normalized_axis, _ = self._get_normalized_axis_from_bounding_box(self.bb)
+        
+    def _get_bb_from_axis(self, axis):
+        normalized_axis = normalize(axis, norm='l2', axis=0)
+        projection = np.matmul(np.linalg.inv(normalized_axis), self.pnts.T)
+
+        projection_x = projection[0, :]
+        projection_y = projection[1, :]
+        projection_z = projection[2, :]
+    
+        project_x_min, project_x_max = np.min(projection_x), np.max(projection_x)
+        project_y_min, project_y_max = np.min(projection_y), np.max(projection_y) 
+        project_z_min, project_z_max = np.min(projection_z), np.max(projection_z) 
+    
+        projected_boundary = np.array([[project_x_min, project_y_min, project_z_max],
+                                       [project_x_min, project_y_max, project_z_max],
+                                       [project_x_max, project_y_max, project_z_max],
+                                       [project_x_max, project_y_min, project_z_max],
+                                       [project_x_min, project_y_min, project_z_max],
+                                       [project_x_min, project_y_min, project_z_min],
+                                       [project_x_min, project_y_max, project_z_min],
+                                       [project_x_max, project_y_max, project_z_min],
+                                       [project_x_max, project_y_min, project_z_min],
+                                       [project_x_min, project_y_min, project_z_min]])
+    
+        bb = np.matmul(normalized_axis, projected_boundary.T).T # 10 by 2 matrix
+        
+        return bb
+    
+    def _get_unnormalized_axis_from_bounding_box(self, bb):
+        """
+        2 * 2, each column is an axis.
+        It is ordered by length, so that the first column is the primary axis.
+        return: unnormalized_axis, norm
+        """
+        axis_1 = np.array([bb[1] - bb[0]]).T
+        axis_2 = np.array([bb[3] - bb[0]]).T
+        axis_3 = np.array([bb[5] - bb[0]]).T
+        unnormalized_unordered_axis = np.hstack([axis_1, axis_2, axis_3])
+        return self._order_unnormalized_axis_from_axis(unnormalized_unordered_axis)  

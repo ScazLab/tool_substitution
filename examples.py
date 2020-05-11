@@ -1,9 +1,8 @@
 #!/usr/bin/env python
 
-import argparse
+#import argparse
 import cv2
 from compare_tools import bbs_to_img, CompareTools, FIGS_PATH
-from pointcloud_bb import BoundingBox
 
 from sample_points_from_stl import (get_guitar_points, get_man_points,
                                     get_hammer_points, get_saw_points,
@@ -21,7 +20,14 @@ parser.add_argument("-H", nargs='+', type=str, default=[],
                     Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
 args = parser.parse_args()
 
+#parser = argparse.ArgumentParser()
+#parser.add_argument("tool", type=str, default='hammer',
+                    #help="Tool to create bounding box for. \
+                    #Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
+#args = parser.parse_args()
 
+def guitar_pc():
+    return get_guitar_points(7000)
 
 def guitar_bb(n, eps, comps=[0,1]):
     pnts = get_guitar_points(n)
