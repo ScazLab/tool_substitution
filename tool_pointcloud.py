@@ -18,7 +18,7 @@ class ToolPointCloud(object):
         self.pnts = pnts
         self.eps = eps # Error term for deciding best bounding box
         self.mean = None
-        self.bb = None
+        self.bb = None # 10 by 3, the 5th and 10th is the reptead point
         self._normalize_pointcloud()
         self.bounding_box()
     
@@ -27,6 +27,23 @@ class ToolPointCloud(object):
     
     def get_axis(self):
         return self.bb.get_normalized_axis()
+    
+    def get_unnormalized_pc(self):
+        return self.pnts + self.mean
+    
+    def get_normalized_pc(self):
+        return self.pnts
+    
+    def get_pc_bb_axis_frame(self):
+        return np.matmul(np.linalg.inv(self.get_axis()), self.pnts)
+    
+    def get_pc_bb_axis_frame_centered(self):
+        pc_bb_axis_frame = self.get_pc_bb_axis_frame()
+        bb_trimed = self.bb.copy()
+        bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
+        bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
+        bb_centroid = np.mean(bb_trimed, axis=0)
+        return pc_bb_axis_frame - bb_centroid
     
     def bb_2d_projection(self, projection_index, norm_index, visualize=True):
         # returns both the pc and the 2D bb
