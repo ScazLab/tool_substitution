@@ -4,9 +4,8 @@ import argparse
 import cv2
 from compare_tools import bbs_to_img, CompareTools, FIGS_PATH
 
-from sample_points_from_stl import (get_guitar_points, get_man_points,
-                                    get_hammer_points, get_saw_points,
-                                    get_rake_points, get_l_points)
+
+from sample_pointcloud import GeneratePointcloud
 
 from tool_segmentation_example import compare_two_tools
 from tool_pointcloud import ToolPointCloud
@@ -21,24 +20,25 @@ parser.add_argument("-H", type=int, default=3,
 
 args = parser.parse_args()
 
+gp = GeneratePointcloud()
 
 def guitar_pc():
-    return get_guitar_points(7000)
+    return gp.get_guitar_points(7000)
 
 def hammer_pc():
-    return get_hammer_points(2000)
+    return gp.get_hammer_points(7000)
 
 def saw_pc():
-    return get_saw_points(3000)
+    return gp.get_saw_points(7000)
 
 def rake_pc():
-    return get_rake_points(7000)
+    return gp.get_rake_points(7000)
 
 def l_pc():
-    return get_l_points(7000)
+    return gp.get_l_points(7000)
 
 def plot_l_PC():
-    pnts = get_l_points(7000)
+    pnts = gp.get_l_points(7000)
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     pca = PCA(n_components=3)
