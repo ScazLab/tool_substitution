@@ -28,7 +28,7 @@ class Mesh(object):
             # n x 3 array of vertex indices for each triangle.
             self.vert_idx  = np.vstack(self._mesh['face'].data['vertex_indices'])
         elif ".stl" in fn:
-            self._mesh = mesh.Mesh.from_file('./tool_files/tools.stl')
+            self._mesh = mesh.Mesh.from_file(fn)
             self._f_type = self.STL
 
     @property
