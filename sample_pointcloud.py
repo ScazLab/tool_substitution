@@ -169,7 +169,7 @@ class GeneratePointcloud(object):
 
     def get_rake_points(self, n):
         # m = mesh.Mesh.from_file('./tool_files/rake.stl')
-        m = Mesh('./tool_files/rake.stl')
+        m = Mesh('./tool_files/rake_recap.stl')
         pnts = self.m2p(n, m).get_pointcloud()
 
         return np.array([pnt for pnt in pnts if pnt[2] > 4.184])

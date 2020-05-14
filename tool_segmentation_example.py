@@ -5,7 +5,7 @@ from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
 from sklearn.cluster import KMeans
-from pointcloud_bb import BoundingBox
+#from pointcloud_bb import BoundingBox
 
 from sample_points_from_stl import( get_guitar_points, get_man_points,
                                     get_hammer_points, get_saw_points,
