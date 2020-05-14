@@ -117,10 +117,10 @@ class BoundingBox2D(BoundingBox):
         #print "ratio: ", ratio
 
         if close_to(ratio, 1, error=self.eps):
-            print("take original pca result")
+            #print("take original pca result")
             self.normalized_axis = pca_axis.copy()
         else:
-            print("choose new result")
+            #print("choose new result")
             self.normalized_axis = min_area_axis.copy()
 
         self.bb = self._get_bb_from_axis(self.normalized_axis)

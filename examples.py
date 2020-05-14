@@ -14,7 +14,7 @@ from tool_pointcloud import ToolPointCloud
 parser = argparse.ArgumentParser()
 parser.add_argument("-t", type=str, default='hammer',
                     help="Tool to create bounding box for. \
-                    Options: 'hammer', 'guitar', 'saw', 'rake', 'L' ")
+                    Options: 'hammer', 'guitar', 'saw', 'rake', 'L', 'knife' ")
 parser.add_argument("-H", type=int, default=3,
                     help="Calc Hamming dist of two segmented tools. Takes num segments as arg. ")
 
@@ -37,6 +37,9 @@ def rake_pc():
 def l_pc():
     return gp.get_l_points(7000)
 
+def knife_pc():
+    return gp.get_knife_points(7000)
+
 def plot_l_PC():
     pnts = gp.get_l_points(7000)
     fig = plt.figure()
@@ -49,23 +52,26 @@ def plot_l_PC():
 
 
 if __name__ == '__main__':
-    tool_pc = None
+    tool_pc = knife_pc()
 
-    if args.t == 'hammer':
-        tool_pc = hammer_pc()
-    elif args.t == 'saw':
-        tool_pc = saw_pc()
-    elif args.t == 'guitar':
-        tool_pc = guitar_pc()
-    elif args.t == 'rake':
-        tool_pc = rake_pc()
-    elif args.t == 'L':
-        tool_pc = l_pc()
+    #if args.t == 'hammer':
+        #tool_pc = hammer_pc()
+    #elif args.t == 'saw':
+        #tool_pc = saw_pc()
+    #elif args.t == 'guitar':
+        #tool_pc = guitar_pc()
+    #elif args.t == 'rake':
+        #tool_pc = rake_pc()
+    #elif args.t == 'L':
+        #tool_pc = l_pc()
+    #elif args.t == 'knife':
+        #tool_pc = knife_pc()
 
+    print "tool_pc.shape: ", tool_pc.shape
 
     if tool_pc is not None:
         pc = ToolPointCloud(tool_pc)
         pc.visualize_bb()
 
-    if args.H:
-        compare_two_tools(k=args.H)
+    #if args.H:
+        #compare_two_tools(k=args.H)

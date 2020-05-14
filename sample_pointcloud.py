@@ -125,7 +125,10 @@ class GeneratePointcloud(object):
 
         return self.ply_to_pointcloud(n, path)
 
-
+    def get_knife_points(self, n):
+        m = Mesh('./tool_files/knife.stl')
+        pnts = self.m2p(n, m).get_pointcloud()
+        return np.array(pnts)        
 
     def get_guitar_points(self, n):
         # m = mesh.Mesh.from_file('./tool_files/guitar.stl')

@@ -86,32 +86,43 @@ class ToolPointCloud(object):
         max_loop = 10
         i = 0
         box = None
+        bbs = []
         
-        while not found_box and i < max_loop:
+        while not found_box:
             vols = []
             bbs = []
             for [projection_axis_index, norm_axis_index] in [[[0, 1], 2], [[0, 2], 1], [[1, 2], 0]]:
-                print "projection index: ", projection_axis_index
-                print "norm_axis_index: ", norm_axis_index
+                #print "projection index: ", projection_axis_index
+                #print "norm_axis_index: ", norm_axis_index
                 bb = self._get_bb_helper(current_axis, projection_axis_index, norm_axis_index)
                 vols.append(bb.volumn())
                 bbs.append(bb)
-                print "axis: "
-                print bb.get_normalized_axis()
-            print "volumnes: ", vols
+                #print "axis: "
+                #print bb.get_normalized_axis()
+            #print "volumnes: ", vols
             max_vol, min_vol = max(vols), min(vols)
+            print "max_vol: ", max_vol
+            print "min_vol: ", min_vol
+            print "ratio: ", max_vol / min_vol
             if close_to(max_vol / min_vol, 1, self.eps):
                 found_box = True
-                self.bb = bbs[vols.index(min(vols))]
-            else:
-                bb = bbs[vols.index(min(vols))]
-                current_axis = bb.get_normalized_axis()
-                print "new current axis is"
-                print current_axis
+                #self.bb = bbs[vols.index(min(vols))]
+            #else:
+                ##bb = bbs[vols.index(min(vols))]
+                #current_axis = bb.get_normalized_axis()
+
+            self.bb = bbs[vols.index(min(vols))]
+            current_axis = self.bb.get_normalized_axis()
+            #print "new current axis is"
+            #print current_axis            
             print "=================================================="
                 
             i += 1
-
+        
+        for bb in bbs:
+            bb.visualize("2D")
+            bb.visualize("3D")
+            
         print "final round: ", i
         print "current axis"
         print current_axis
