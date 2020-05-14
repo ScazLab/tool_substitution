@@ -21,9 +21,27 @@ class ToolPointCloud(object):
         self.bb = None # 10 by 3, the 5th and 10th is the reptead point
         self._normalize_pointcloud()
         self.bounding_box()
+        self.aruco_frame = None # in unnormalized_pc frame
     
     def get_bb(self):
         return self.bb
+    
+    """
+    The aruco_frame related functions are yet to be integrated with the rest of this class.
+    Code needs to be refactored
+    """
+    def set_aruco_frame(self, aruco_frame):
+        self.aruco_frame = aruco_frame
+    
+    def set_aruco_frame_with_four_corners(self, corners, aruco_size, aruco_id):
+        # corners are in the scanned object frame, not the world frame when run the experiment
+        # The corners are in the order of: TBD
+        # aruco size is in meters
+        
+        pass
+    """
+    aruco related functions finished
+    """
     
     def get_axis(self):
         return self.bb.get_normalized_axis()
@@ -33,6 +51,10 @@ class ToolPointCloud(object):
     
     def get_normalized_pc(self):
         return self.pnts
+    
+    def get_pc_aruco_frame(self):
+        unnomalized_pc = self.get_unnormalized_pc()
+        return np.matmul(np.linalg.inv(self.aruco_frame), unnomalized_pc)
     
     def get_pc_bb_axis_frame(self):
         return np.matmul(np.linalg.inv(self.get_axis()), self.pnts)
