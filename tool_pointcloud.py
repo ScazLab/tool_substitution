@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import cv2
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -10,6 +11,7 @@ from scipy.spatial import ConvexHull
 
 from bounding_box import BoundingBox3D
 from util import close_to
+
 
 class ToolPointCloud(object):
     """Creates bounding box around pointcloud data"""
@@ -27,6 +29,34 @@ class ToolPointCloud(object):
         self._normalize_pointcloud()
         self.bounding_box()        
     
+    def scale_pnts_to_target(self, target_tpc, keep_proportional=False):
+        """
+        Scale points to match the dims of a target tool pointcloud.
+        If keep_proportional == True, volumns of bbs will be scaled while
+        keeping side proportions constant.
+        """
+
+        src_dim_lens   = self.bb.dim_lens
+        target_dim_lens = target_tpc.bb.dim_lens
+
+        if keep_proportional:
+            # Get volumns of both bbs
+            targ_vol =  target_dim_lens[0] * target_dim_lens[1] * target_dim_lens[2]
+            src_vol = src_dim_lens[0] * src_dim_lens[1] * src_dim_lens[2]
+
+            # Get ratio of columns
+            scale_val = targ_vol / src_vol
+            # Proportionally scale src pc based on this ratio
+            scale_factor = math.pow(scale_val, 1.0/3.0)
+
+
+        else:
+            scale_factor = target_dim_lens / src_dim_lens
+
+        # Scale points.
+        self.pnts *= scale_factor
+        self.bb.scale_bb(scale_factor)
+
     def get_bb(self):
         return self.bb
     

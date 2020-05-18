@@ -31,8 +31,21 @@ class BoundingBox(object):
     def get_pc(self):
         return self.pnts
 
+    @property
+    def dim_lens(self):
+        ranges = self.get_ranges()
+        return np.abs(ranges[1,: ] - ranges[0, :])
+
     def visualize(self):
         pass
+
+    def scale_bb(self, scales):
+        # assert scales.shape[] == self.bb.shape[1]
+        scales = np.array(scales)
+
+        self.bb *= scales
+        self.norms *= scales
+
 
     def _calculate_axis(self):
         pass
@@ -66,6 +79,10 @@ class BoundingBox(object):
         unnormalized_axis, norm = self._get_unnormalized_axis_from_bounding_box(bb)
 
         return normalize(unnormalized_axis, norm='l2', axis=0), norm
+
+    def get_ranges(self):
+        # Returns 2xdim matrix where each column has extrema along each dim.
+        return np.vstack([self.bb.min(axis=0), self.bb.max(axis=0)])
 
 class BoundingBox2D(BoundingBox):
     def __init__(self, pnts, eps=0.05):
