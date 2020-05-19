@@ -25,10 +25,10 @@ class ToolPointCloud(object):
         self.scale = 0 # The scale used to scale to unit in meters.
         self.scales = []
         self.is_scaled = False
-        
+
         self._normalize_pointcloud()
-        self.bounding_box()        
-    
+        self.bounding_box()
+
     def scale_pnts_to_target(self, target_tpc, keep_proportional=False):
         """
         Scale points to match the dims of a target tool pointcloud.
@@ -59,20 +59,20 @@ class ToolPointCloud(object):
 
     def get_bb(self):
         return self.bb
-    
+
     """
     The aruco_frame related functions are yet to be integrated with the rest of this class.
     Code needs to be refactored
     """
     #def set_aruco_frame(self, aruco_frame):
         #self.aruco_frame = aruco_frame
-    
+
     def set_scale(self, model_length, actual_length):
         if model_length == 0 or actual_length == 0:
             raise Exception("either the model length of the actual length is 0!! Cannot determin the scale")
-        
+
         scale = actual_length / model_length
-        
+
         if self.scale == 0: # not set yet
             self.scale = scale
         else:
@@ -80,110 +80,110 @@ class ToolPointCloud(object):
                 self.scales.append(scale)
             else:
                 raise Exception("Current scale {} is very different from saved scale {}".format(scale, self.scale))
-            
+
         self.scale = sum(self.scales) / len(self.scales)
-    
+
     def scale(self):
         self.pnts *= self.scale
         self.mean *= self.scale
-        self.bounding_box() 
-        
+        self.bounding_box()
+
         for frame in self.aruco_frame.values():
             frame[:-1, 3] *= self.scale
-        
+
         self.is_scaled = True
-    
+
     def set_aruco_frame_with_four_corners(self, corners, aruco_size, aruco_id):
         # corners are in the scanned object frame, not the world frame when run the experiment
         # https://docs.opencv.org/trunk/d5/dae/tutorial_aruco_detection.html
         # https://github.com/pal-robotics/aruco_ros
         # The corners are in the order of:
-        #      - 1. the first corner is the top left corner£»
-        #      - 2. followed by the top right£»
-        #      - 3. bottom right£»
+        #      - 1. the first corner is the top left corner
+        #      - 2. followed by the top right
+        #      - 3. bottom right
         #      - 4. and bottom left
         # X direction: 1 -> 4; 2 -> 3
         # Y direction: 1 -> 2; 4 -> 3
         # Z direction: cross produce
         # center: the centroid of the shape
         # aruco size is in meters
-        
+
         if self.aruco_frame.has_key(aruco_id):
             print "aruco_id: ", aruco_id, " has already set!"
             return
-        
+
         x_direction_14 = corners[3, :]  - corners[0, :]
         x_direction_23 = corners[2, :]  - corners[1, :]
-        
+
         x_direction_14_length = np.linalg.norm(x_direction_14)
         x_direction_23_length = np.linalg.norm(x_direction_23)
-        
+
         x_direction_14 = normalize(x_direction_14)
         x_direction_23 = normalize(x_direction_23)
-        
+
         if not close_to(np.dot(x_direction_14, x_direction_23), 1):
             raise Exception("The corners of the markers are not right. The line of 1(top left)-4(bottom left) and 2(top right)-3(bottom right) are not parallel.")
         if not close_to(x_direction_14_length, x_direction_23_length):
             raise Exception("The corners of the markers are not right. The length of 1(top left)-4(bottom left) and 2(top right)-3(bottom right) are not the same.")
-            
+
         x_length = (x_direction_14_length, x_direction_23_length) / 2
         x_direction = (x_direction_14 + x_direction_23) / 2
         x_direction = normalize(x_direction)
-        
+
         y_direction_12 = corners[1, :]  - corners[0, :]
         y_direction_43 = corners[2, :]  - corners[3, :]
-        
+
         y_direction_12_length = np.linalg.norm(y_direction_12)
         y_direction_43_length = np.linalg.norm(y_direction_43)
-        
+
         y_direction_12 = normalize(y_direction_12)
         y_direction_43 = normalize(y_direction_43)
-        
+
         if not close_to(np.dot(y_direction_12, y_direction_43), 1):
             raise Exception("The corners of the markers are not right. The line of 1(top left)-2(top right) and 4(bottom left)-3(bottom right) are not parallel.")
         if not close_to(y_direction_12_length, y_direction_43_length):
             raise Exception("The corners of the markers are not right. The length of 1(top left)-2(top right) and 4(bottom left)-3(bottom right) are not the same.")
-        
+
         y_length = (y_direction_12_length, y_direction_43_length) / 2
         y_direction = (y_direction_12 + y_direction_43) / 2
         y_direction = normalize(y_direction)
-        
+
         if not close_to(np.dot(x_direction, y_direction), 0):
             raise Exception("The corners of the markers are not right. x and y are not perpendicular.")
         if not close_to(x_length, y_length):
             raise Exception("The corners of the markers are not right. The length of x and y are not the same.")
-            
+
         z_direction = np.cross(x_direction, y_direction)
         z_direction = normalize(z_direction)
-        
+
         centroid = np.mean(corners, axis=0)
-        
+
         aruco_frame = np.vstack([x_direction, y_direction, z_direction, centroid]).T
         aruco_frame = np.vstack([aruco_frame], np.array([0, 0, 0, 1]))
-        
+
         self.aruco_frame[aruco_id] = aruco_frame
-        
-        
+
+
     """
     aruco related functions finished
     """
-    
+
     def get_axis(self):
         return self.bb.get_normalized_axis()
-    
+
     def get_unnormalized_pc(self):
         return self.pnts + self.mean
-    
+
     def get_normalized_pc(self):
         return self.pnts
-    
+
     def get_pc_aruco_frame(self):
         unnomalized_pc = self.get_unnormalized_pc()
         return np.matmul(np.linalg.inv(self.aruco_frame), unnomalized_pc)
-    
+
     def get_pc_bb_axis_frame(self):
         return np.matmul(np.linalg.inv(self.get_axis()), self.pnts)
-    
+
     def get_pc_bb_axis_frame_centered(self):
         pc_bb_axis_frame = self.get_pc_bb_axis_frame()
         bb_trimed = self.bb.copy()
@@ -191,7 +191,7 @@ class ToolPointCloud(object):
         bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
         bb_centroid = np.mean(bb_trimed, axis=0)
         return pc_bb_axis_frame - bb_centroid
-    
+
     def bb_2d_projection(self, projection_index, norm_index, visualize=True):
         # returns both the pc and the 2D bb
         return self.bb.bb_2d_projection(projection_index, norm_index, visualize)
@@ -213,7 +213,7 @@ class ToolPointCloud(object):
         box = None
         bbs = []
         self.bb = None
-        
+
         while not found_box:
             vols = []
             bbs = []
@@ -240,15 +240,15 @@ class ToolPointCloud(object):
             self.bb = bbs[vols.index(min(vols))]
             current_axis = self.bb.get_normalized_axis()
             #print "new current axis is"
-            #print current_axis            
+            #print current_axis
             print "=================================================="
-                
+
             i += 1
-        
+
         for bb in bbs:
             bb.visualize("2D")
             bb.visualize("3D")
-            
+
         print "final round: ", i
         print "current axis"
         print current_axis
@@ -265,7 +265,7 @@ class ToolPointCloud(object):
         ax.axis('equal')
         ax.scatter(xs=self.pnts[:, 0], ys=self.pnts[:, 1], zs=self.pnts[:, 2], c='b')
         plt.show()
-    
+
     def visualize_bb(self):
         self.bb.visualize("3D")
         self.bb.visualize("2D")

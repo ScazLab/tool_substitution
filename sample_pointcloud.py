@@ -65,6 +65,7 @@ class Mesh(object):
 
 
 class Mesh2Pointcloud(object):
+
     def __init__(self, n,  mesh):
         "docstring"
         self.mesh = mesh

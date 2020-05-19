@@ -10,6 +10,8 @@ from sample_pointcloud import GeneratePointcloud
 from tool_segmentation_example import compare_two_tools
 from tool_pointcloud import ToolPointCloud
 
+import open3d as o3d
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-t", type=str, default='hammer',
@@ -69,9 +71,47 @@ if __name__ == '__main__':
 
     print "tool_pc.shape: ", tool_pc.shape
 
-    if tool_pc is not None:
+    if tool_pc is  None:
+
+        tool_pc = gp.get_random_ply(2000)
         pc = ToolPointCloud(tool_pc)
         pc.visualize_bb()
 
-    #if args.H:
-        #compare_two_tools(k=args.H)
+    if args.H:
+        pass
+        # compare_two_tools(k=args.H)
+
+    pnts1 = gp.get_random_ply(1000)
+    pnts2 = gp.get_random_ply(1000)
+
+    pc1 = ToolPointCloud(pnts1)
+    pc2 = ToolPointCloud(pnts2)
+
+    old_norm = pc1.bb.dim_lens
+    old_vol  = old_norm[0] * old_norm[1] * old_norm[2]
+    print("SRC TOOL BEFORE SCALING")
+    print("SRC DIMS: {}".format(old_norm))
+    print("SRC VOL: {}".format(old_vol))
+    print("bb: {}".format(pc1.bb))
+
+    target_norm = pc2.bb.dim_lens
+    target_vol  = target_norm[0] * target_norm[1] * target_norm[2]
+    print("TARGET DIMS: {}".format(target_norm))
+    print("TARGET VOL: {}".format(target_vol))
+
+    pc1.visualize_bb()
+
+
+    pc1.scale_pnts_to_target(pc2, True)
+    print("SRC TOOL AFTER SCALING")
+    new_norm = pc1.bb.dim_lens
+    new_vol  = new_norm[0] * new_norm[1] * new_norm[2]
+    print("SRC DIMS: {}".format(new_norm))
+    print("SRC VOL: {}".format(new_vol))
+    pc1.visualize_bb()
+# p1 = o3d.geometry.PointCloud()
+# p2 = o3d.geometry.PointCloud()
+
+# p1.points = o3d.utility.Vector3dVector(pnts1)
+# p2.points = o3d.utility.Vector3dVector(pnts2)
+# print(o3d.registration.evaluate_registration(p1,p2, .5))
