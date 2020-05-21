@@ -13,7 +13,7 @@ from sample_points_from_stl import( get_guitar_points, get_man_points,
 
 from tool_pointcloud import ToolPointCloud
 from bounding_box import BoundingBox2D
-from compare_tools import CompareTools, bbs_to_img
+from compare_tools import CompareTools, bbs_to_img, pnts_to_img
 
 def plot_segments(bbs, pnts, labels):
     fig = plt.figure()
@@ -30,7 +30,7 @@ def plot_segments(bbs, pnts, labels):
 
     plt.show()
 
-def segment_pnts(pnts, fn=None, k=2):
+def segment_pnts(pnts, k=2):
     """
     Segment points using kmeans and then fit BBs to each segment.
     """
@@ -58,32 +58,68 @@ def segment_pnts(pnts, fn=None, k=2):
         bbs.append(bb2d)
 
 
-    if not fn is None:
-        fn = "{}_{}".format(fn, k)
-
     # Save tool shape as outlines of BBs.
-    bbs_to_img(bbs, fn=fn)
+    # bbs_to_img(bbs, fn=fn)
+    return bbs, pc
 
 
-def compare_two_tools(k=2):
+def compare_two_tools(k=2, use_bbs=True):
     pnts1 = get_rake_points(7000)
     pnts2 = get_guitar_points(7000)
     
     fn1 = "rake"
     fn2 = "guitar"
 
-    segment_pnts(pnts1, fn=fn1, k=k)
-    segment_pnts(pnts2, fn=fn2, k=k)
-
     fn1 = "{}_{}.png".format(fn1, k)
     fn2 = "{}_{}.png".format(fn2, k)
+
+    bbs1, pc1 = segment_pnts(pnts1, k=k)
+    bbs2, pc2 = segment_pnts(pnts2, k=k)
+
+    if use_bbs:
+        bbs_to_img(bbs1, fn=fn1)
+        bbs_to_img(bbs2, fn=fn2)
+
+    else:
+
+        for pc, fn in zip([pc1, pc2], [fn1, fn2]):
+            _,bb = pc.bb_2d_projection([0, 1], 2, visualize=False)
+            pnts = bb.get_pc()
+
+            pnts_to_img(pnts, fn=fn)
+
+
 
     ct = CompareTools()
     ct.hamming_distance(fn1, fn2)
 
 
 
+
+def compare_tool_moments(k=2):
+    pnts1 = get_hammer_points(7000)
+    pnts2 = get_saw_points(7000)
+    
+    bbs1, pc1 = segment_pnts(pnts1, k=k)
+    bbs2, pc2 = segment_pnts(pnts2, k=k)
+
+    ct = CompareTools(pc1, pc2)
+    ct.choose_tool_orientation(metric='hamming')
+
+    # for pc, fn in zip([pc1, pc2], [fn1, fn2]):
+    #     _,bb = pc.bb_2d_projection([0, 1], 2, visualize=False)
+    #     pnts = bb.get_pc()
+
+    #     pnts_to_img(pnts, fn=fn)
+
+
+
+    # ct = CompareTools()
+    # ct.moments_distance(fn1, fn2)
+
+
 if __name__ == '__main__':
     # pnts = get_rake_points(n=7000)
-    compare_two_tools(k=1)
+    # compare_two_tools(k=3, use_bbs=False)
+    compare_tool_moments()
     # segment_pnts(pnts, fn='guitar', k=k)

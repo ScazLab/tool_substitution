@@ -79,6 +79,7 @@ class CompareTools(object):
 
             print("{} score: {}".format(sub_status, score))
 
+
     def moments_distance(self, img1_fn, img2_fn, flip_sub=False,width=300):
         """
         Uses normalized central moments (ncm) to compare 
@@ -101,7 +102,7 @@ class CompareTools(object):
         moments2 = cv2.moments(sub_shape)
 
         #central normalized moments:
-        # double  nu20, nu11, nu02, nu30, nu21, nu12, nu03
+        # nu20, nu11, nu02, nu30, nu21, nu12, nu03
         ncm_keys = [m for m in moments1 if 'nu' in m]
 
         ncm1 = np.array([moments1[m] for m in ncm_keys])
