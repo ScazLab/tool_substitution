@@ -57,6 +57,8 @@ class ToolPointCloud(object):
         self.pnts *= scale_factor
         self.bb.scale_bb(scale_factor)
 
+        return self.pnts
+
     def get_bb(self):
         return self.bb
 
