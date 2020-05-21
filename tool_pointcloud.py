@@ -57,6 +57,8 @@ class ToolPointCloud(object):
         self.pnts *= scale_factor
         self.bb.scale_bb(scale_factor)
 
+        return self.pnts
+
     def get_bb(self):
         return self.bb
 
@@ -245,9 +247,9 @@ class ToolPointCloud(object):
 
             i += 1
 
-        for bb in bbs:
-            bb.visualize("2D")
-            bb.visualize("3D")
+        # for bb in bbs:
+        #     bb.visualize("2D")
+        #     bb.visualize("3D")
 
         print "final round: ", i
         print "current axis"
