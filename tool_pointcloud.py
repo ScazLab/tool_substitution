@@ -98,9 +98,9 @@ class ToolPointCloud(object):
         # https://docs.opencv.org/trunk/d5/dae/tutorial_aruco_detection.html
         # https://github.com/pal-robotics/aruco_ros
         # The corners are in the order of:
-        #      - 1. the first corner is the top left corner£»
-        #      - 2. followed by the top right£»
-        #      - 3. bottom right£»
+        #      - 1. the first corner is the top left corner;
+        #      - 2. followed by the top right;
+        #      - 3. bottom right;
         #      - 4. and bottom left
         # X direction: 1 -> 4; 2 -> 3
         # Y direction: 1 -> 2; 4 -> 3
@@ -182,11 +182,11 @@ class ToolPointCloud(object):
         return np.matmul(np.linalg.inv(self.aruco_frame), unnomalized_pc)
     
     def get_pc_bb_axis_frame(self):
-        return np.matmul(np.linalg.inv(self.get_axis()), self.pnts)
+        return np.matmul(np.linalg.inv(self.get_axis()), self.pnts.T).T
     
     def get_pc_bb_axis_frame_centered(self):
         pc_bb_axis_frame = self.get_pc_bb_axis_frame()
-        bb_trimed = self.bb.copy()
+        bb_trimed = self.bb.bb.copy()
         bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
         bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
         bb_centroid = np.mean(bb_trimed, axis=0)
@@ -245,9 +245,9 @@ class ToolPointCloud(object):
                 
             i += 1
         
-        for bb in bbs:
-            bb.visualize("2D")
-            bb.visualize("3D")
+        #for bb in bbs:
+            #bb.visualize("2D")
+            #bb.visualize("3D")
             
         print "final round: ", i
         print "current axis"

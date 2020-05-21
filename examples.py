@@ -52,7 +52,7 @@ def plot_l_PC():
 
 
 if __name__ == '__main__':
-    tool_pc = knife_pc()
+    tool_pc = rake_pc()
 
     #if args.t == 'hammer':
         #tool_pc = hammer_pc()
@@ -71,7 +71,11 @@ if __name__ == '__main__':
 
     if tool_pc is not None:
         pc = ToolPointCloud(tool_pc)
-        pc.visualize_bb()
+        pc.visualize()
+        centered_pc = pc.get_pc_bb_axis_frame_centered()
+        centered_tpc = ToolPointCloud(centered_pc)
+        centered_tpc.visualize()
+        #pc.visualize_bb()
 
     #if args.H:
         #compare_two_tools(k=args.H)
