@@ -123,6 +123,7 @@ class GeneratePointcloud(object):
         k    = random.choice(os.listdir(os.path.join(PLY_DIR_PATH, tool)))
         f    = random.choice(os.listdir( os.path.join(PLY_DIR_PATH, tool, k) ))
         path = os.path.join(tool,k,f)
+        print("LOADING {}\n".format(path))
 
         return self.ply_to_pointcloud(n, path)
 

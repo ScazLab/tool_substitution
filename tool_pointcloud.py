@@ -15,7 +15,7 @@ from util import close_to
 
 class ToolPointCloud(object):
     """Creates bounding box around pointcloud data"""
-    def __init__(self, pnts, eps=0.001):
+    def __init__(self, pnts, eps=0.001, normalize=True):
         "Point cloud of the tool"
         self.pnts = pnts
         self.eps = eps # Error term for deciding best bounding box
@@ -26,7 +26,9 @@ class ToolPointCloud(object):
         self.scales = []
         self.is_scaled = False
 
-        self._normalize_pointcloud()
+        if normalize:
+            self._normalize_pointcloud()
+
         self.bounding_box()
 
     def scale_pnts_to_target(self, target_tpc, keep_proportional=False):
