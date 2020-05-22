@@ -223,7 +223,7 @@ class BoundingBox3D(BoundingBox):
             print "visualize"
             bb.visualize()
         
-        return pnts_projection_frame, bb
+        return pnts_projection_frame.T[:, :-1], bb
     
     def set_axis(self, axis = None):
         """
