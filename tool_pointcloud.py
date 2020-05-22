@@ -190,10 +190,19 @@ class ToolPointCloud(object):
     
     def get_pc_bb_axis_frame_centered(self):
         pc_bb_axis_frame = self.get_pc_bb_axis_frame()
+        #print "pc_bb_axis_frame.shape: ", pc_bb_axis_frame.shape
         bb_trimed = self.bb.bb.copy()
         bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
         bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
-        bb_centroid = np.mean(bb_trimed, axis=0)
+        #print "bb_trimed"
+        #print bb_trimed
+        # convert the bbs to the right frame:
+        bb_trimed_axis_frame = np.matmul(np.linalg.inv(self.get_axis()), bb_trimed.T).T
+        #print "bb_trimed_axis_frame"
+        #print bb_trimed_axis_frame
+        bb_centroid = np.mean(bb_trimed_axis_frame, axis=0)
+        #print "bb_centroid:", bb_centroid
+        #print "centralized shape: ", (pc_bb_axis_frame - bb_centroid).shape
         return pc_bb_axis_frame - bb_centroid
 
     def bb_2d_projection(self, projection_index, norm_index, visualize=True):
@@ -231,9 +240,9 @@ class ToolPointCloud(object):
                 #print bb.get_normalized_axis()
             #print "volumnes: ", vols
             max_vol, min_vol = max(vols), min(vols)
-            print "max_vol: ", max_vol
-            print "min_vol: ", min_vol
-            print "ratio: ", max_vol / min_vol
+            #print "max_vol: ", max_vol
+            #print "min_vol: ", min_vol
+            #print "ratio: ", max_vol / min_vol
             if close_to(max_vol / min_vol, 1, self.eps):
                 found_box = True
                 #self.bb = bbs[vols.index(min(vols))]
@@ -244,18 +253,18 @@ class ToolPointCloud(object):
             self.bb = bbs[vols.index(min(vols))]
             current_axis = self.bb.get_normalized_axis()
             #print "new current axis is"
-            #print current_axis
-            print "=================================================="
-
+            #print current_axis            
+            #print "=================================================="
+                
             i += 1
         
         #for bb in bbs:
             #bb.visualize("2D")
             #bb.visualize("3D")
             
-        print "final round: ", i
-        print "current axis"
-        print current_axis
+        #print "final round: ", i
+        #print "current axis"
+        #print current_axis
 
     def _get_bb_helper(self, axis, projection_axis_index, norm_axis_index):
         box = BoundingBox3D(self.pnts)
