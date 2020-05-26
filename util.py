@@ -44,8 +44,8 @@ def get_sorted_index(array, reverse_order=False):
 
 def min_point_distance(pc1, pc2):
     """
-    pc1: 2 * n
-    pc2: 2 * m
+    pc1: 3 * n
+    pc2: 3 * m
     threshold: int
     """
     length_pc1 = pc1.shape[1]
@@ -85,3 +85,25 @@ def is_2d_point_cloud_overlap(pc1, pc2, threshold):
     test_1 = min_point_distance(pc1, pc2) < threshold
     test_2 = min_point_distance(pc2, pc1) < threshold
     return test_1 and test_2
+
+def r_x(a):
+    return np.array([
+            [1., 0., 0.],
+            [0., np.cos(a), -np.sin(a)],
+            [0., np.sin(a), np.cos(a)]
+        ])
+
+
+def r_y(a):
+        return np.array([
+            [np.cos(a), 0, np.sin(a)],
+            [0, 1, 0],
+            [-np.sin(a), 0,  np.cos(a)]
+        ])
+
+def r_z(a):
+        return  np.array([
+            [np.cos(a), -np.sin(a), 0],
+            [np.sin(a), np.cos(a), 0],
+            [0, 0, 1]
+        ])
