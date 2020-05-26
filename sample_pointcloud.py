@@ -27,6 +27,7 @@ class Mesh(object):
             self._f_type = self.PLY
             # n x 3 array of vertex indices for each triangle.
             self.vert_idx  = np.vstack(self._mesh['face'].data['vertex_indices'])
+            self._gen_segment_dict()
         elif ".stl" in fn:
             self._mesh = mesh.Mesh.from_file(fn)
             self._f_type = self.STL
@@ -61,7 +62,21 @@ class Mesh(object):
     @property
     def colors(self):
         if self._f_type == self.PLY:
-            return self._mesh['vertex'][['red', 'green', 'blue']]
+           # return self._mesh.elements[0].data[self.vert_idx[:,[0,1,2]]][['red',
+           #                                                                 'green',
+           #                                                                 'blue']]
+           colors = self._mesh.elements[0].data[self.vert_idx[:, 0]][['red',
+                                                                 'green',
+                                                                 'blue']]
+           colors = np.array([self.segment_dict[(c[0], c[1], c[2])] for c in colors])
+           return colors
+
+    def _gen_segment_dict(self):
+        segments = np.unique(self._mesh['vertex'][['red', 'green', 'blue']])
+
+        self.segment_dict = {}
+        for s in range(segments.shape[0]):
+            self.segment_dict[tuple(segments[s])] = s
 
 
 class Mesh2Pointcloud(object):
@@ -83,8 +98,7 @@ class Mesh2Pointcloud(object):
         return np.random.choice(range(len(areas)), size=self.n, p=probs)
 
 
-
-    def get_pointcloud(self):
+    def get_pointcloud(self, get_color=False):
         indx  = self._weighted_rand_indices()
         v1_xyz, v2_xyz, v3_xyz = self.mesh.v0[indx], self.mesh.v1[indx], self.mesh.v2[indx]
 
@@ -100,12 +114,13 @@ class Mesh2Pointcloud(object):
 
         results = (v1_xyz * u) + (v2_xyz * v) + (w * v3_xyz)
 
-        return results.astype(np.float32)
-        # if mesh._f_type == mesh.STL:
-        #     return results.astype(np.float32)
-        # else:
-        #     colors = mesh.colors[indx]
-        #     return results.astypr(np.float32), colors
+        if self.mesh._f_type == self.mesh.STL:
+            return results.astype(np.float32)
+        elif self.mesh._f_type == self.mesh.PLY and get_color:
+            colors = self.mesh.colors[indx]
+
+            # Add colors to pointcloud matrix and return.
+            return np.vstack([results.astype(np.float32).T, colors]).T
 
 
 class GeneratePointcloud(object):
@@ -113,19 +128,20 @@ class GeneratePointcloud(object):
         "docstring"
         self.m2p = Mesh2Pointcloud
 
-    def ply_to_pointcloud(self, n, fn):
+    def ply_to_pointcloud(self, n, fn, get_color=False):
         mesh = Mesh(fn)
+        print(mesh.segment_dict)
 
-        return self.m2p(n, mesh).get_pointcloud()
+        return self.m2p(n, mesh).get_pointcloud(get_color)
 
-    def get_random_ply(self, n):
+    def get_random_ply(self, n, get_color=False):
         tool = random.choice(os.listdir(PLY_DIR_PATH))
         k    = random.choice(os.listdir(os.path.join(PLY_DIR_PATH, tool)))
         f    = random.choice(os.listdir( os.path.join(PLY_DIR_PATH, tool, k) ))
         path = os.path.join(tool,k,f)
         print("LOADING {}\n".format(path))
 
-        return self.ply_to_pointcloud(n, path)
+        return self.ply_to_pointcloud(n, path, get_color)
 
     def get_knife_points(self, n):
         m = Mesh('./tool_files/knife.stl')
@@ -205,4 +221,5 @@ if __name__ == '__main__':
     # test_sampling(5000, tools_mesh)
     # fn = "hammer/3/hammer_out_4_10_fused.ply"
     # ply_to_pointcloud(100, fn)
-    gc = GeneratePointcloud().get_random_ply(1000)
+    gc = GeneratePointcloud().get_random_ply(1000, True)
+    
