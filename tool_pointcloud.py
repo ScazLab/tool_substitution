@@ -15,9 +15,15 @@ from util import close_to
 
 class ToolPointCloud(object):
     """Creates bounding box around pointcloud data"""
-    def __init__(self, pnts, eps=0.001, normalize=True):
+    def __init__(self, pnts, eps=0.001, normalize=True, contact_pnt_idx=None):
         "Point cloud of the tool"
-        self.pnts = pnts
+        if pnts.shape[1] == 4:
+            # First 3 columns are coords, last is segment
+            self.pnts = pnts[:,[0,1,2]]
+            self.segments = pnts[:,3].astype(np.int)
+        else:
+            self.pnts = pnts
+            self.segments = None
         self.eps = eps # Error term for deciding best bounding box
         self.mean = None
         self.bb = None # 10 by 3, the 5th and 10th is the reptead point
@@ -29,6 +35,7 @@ class ToolPointCloud(object):
         if normalize:
             self._normalize_pointcloud()
 
+        self.contact_pnt_idx = contact_pnt_idx
         self.bounding_box()
 
     def scale_pnts_to_target(self, target_tpc, keep_proportional=False):
@@ -40,6 +47,7 @@ class ToolPointCloud(object):
 
         src_dim_lens   = self.bb.dim_lens
         target_dim_lens = target_tpc.bb.dim_lens
+
 
         if keep_proportional:
             # Get volumns of both bbs
@@ -56,13 +64,58 @@ class ToolPointCloud(object):
             scale_factor = target_dim_lens / src_dim_lens
 
         # Scale points.
-        self.pnts *= scale_factor
-        self.bb.scale_bb(scale_factor)
+        # self.pnts *= scale_factor
+        # self.bb.scale_bb(scale_factor)
 
-        return self.pnts
+        return self.pnts * scale_factor
+
+    def get_segment_from_point(self, idx):
+        """
+        Returns the segment to which idx of point belongs.
+        @idx the index of the point.
+        """
+        return self.segments[idx]
+
+
+    def get_pnts_in_segment(self, segment):
+        """
+        Returns all the points in segment.
+        @segment, the number of the segment.
+        """
+        assert(segment in np.unique(self.segments))
+
+        idx = np.where(self.segments == segment)[0]
+        return self.pnts[idx]
+
+
+    def get_pnt(self, i):
+        return self.pnts[i, :]
 
     def get_bb(self):
         return self.bb
+
+    def idx_to_segment_idx(self, idx):
+        """
+        Given a point idx for the entire pointcloud, get the idx of the same
+        point in the context of just the segment with which it belongs.
+        """
+        seg = self.get_segment_from_point(idx)
+        pnt = self.get_pnt(idx)
+        seg_pnts = self.get_pnts_in_segment(seg)
+
+        idx = np.where((seg_pnts == pnt).all(axis=1))
+        print("IDX ", idx)
+        return idx[0][0]
+
+    def segment_idx_to_idx(self, seg, seg_idx):
+        """
+        Given a point idx within a particular segment, get the idx
+        of the same point in the context of entire pointcloud.
+        """
+        seg_pnts = self.get_pnts_in_segment(seg)
+        seg_pnt = seg_pnts[seg_idx, :]
+
+        return np.where((self.pnts == seg_pnt).all(axis=1))[0][0]
 
     """
     The aruco_frame related functions are yet to be integrated with the rest of this class.
@@ -126,9 +179,13 @@ class ToolPointCloud(object):
         x_direction_23 = normalize(x_direction_23)
 
         if not close_to(np.dot(x_direction_14, x_direction_23), 1):
-            raise Exception("The corners of the markers are not right. The line of 1(top left)-4(bottom left) and 2(top right)-3(bottom right) are not parallel.")
+            raise Exception("The corners of the markers are not right. \
+            The line of 1(top left)-4(bottom left) and 2(top right)-3(bottom right) \
+            are not parallel.")
         if not close_to(x_direction_14_length, x_direction_23_length):
-            raise Exception("The corners of the markers are not right. The length of 1(top left)-4(bottom left) and 2(top right)-3(bottom right) are not the same.")
+            raise Exception("The corners of the markers are not right. \
+            The length of 1(top left)-4(bottom left) and 2(top right)-3(bottom right) \
+            are not the same.")
 
         x_length = (x_direction_14_length, x_direction_23_length) / 2
         x_direction = (x_direction_14 + x_direction_23) / 2
@@ -144,7 +201,9 @@ class ToolPointCloud(object):
         y_direction_43 = normalize(y_direction_43)
 
         if not close_to(np.dot(y_direction_12, y_direction_43), 1):
-            raise Exception("The corners of the markers are not right. The line of 1(top left)-2(top right) and 4(bottom left)-3(bottom right) are not parallel.")
+            raise Exception("The corners of the markers are not right. \
+            The line of 1(top left)-2(top right) and 4(bottom left)-3(bottom right) \
+            are not parallel.")
         if not close_to(y_direction_12_length, y_direction_43_length):
             raise Exception("The corners of the markers are not right. The length of 1(top left)-2(top right) and 4(bottom left)-3(bottom right) are not the same.")
 
@@ -174,6 +233,10 @@ class ToolPointCloud(object):
 
     def get_axis(self):
         return self.bb.get_normalized_axis()
+
+    def transform(self, pnts):
+        axes = self.get_axis()
+        return np.dot(axes, pnts)
 
     def get_unnormalized_pc(self):
         return self.pnts + self.mean
@@ -227,22 +290,22 @@ class ToolPointCloud(object):
         bbs = []
         self.bb = None
 
-        while not found_box:
+        while not found_box or i == max_loop:
             vols = []
             bbs = []
             for [projection_axis_index, norm_axis_index] in [[[0, 1], 2], [[0, 2], 1], [[1, 2], 0]]:
-                #print "projection index: ", projection_axis_index
-                #print "norm_axis_index: ", norm_axis_index
+                # print "projection index: ", projection_axis_index
+                # print "norm_axis_index: ", norm_axis_index
                 bb = self._get_bb_helper(current_axis, projection_axis_index, norm_axis_index)
                 vols.append(bb.volumn())
                 bbs.append(bb)
-                #print "axis: "
-                #print bb.get_normalized_axis()
-            #print "volumnes: ", vols
+                # print "axis: "
+                # print bb.get_normalized_axis()
+            # print "volumnes: ", vols
             max_vol, min_vol = max(vols), min(vols)
-            #print "max_vol: ", max_vol
-            #print "min_vol: ", min_vol
-            #print "ratio: ", max_vol / min_vol
+            # print "max_vol: ", max_vol
+            # print "min_vol: ", min_vol
+            # print "ratio: ", max_vol / min_vol
             if close_to(max_vol / min_vol, 1, self.eps):
                 found_box = True
                 #self.bb = bbs[vols.index(min(vols))]
@@ -252,9 +315,9 @@ class ToolPointCloud(object):
 
             self.bb = bbs[vols.index(min(vols))]
             current_axis = self.bb.get_normalized_axis()
-            #print "new current axis is"
-            #print current_axis            
-            #print "=================================================="
+            # print "new current axis is"
+            # print current_axis            
+            # print "=================================================="
                 
             i += 1
         
@@ -262,9 +325,9 @@ class ToolPointCloud(object):
             #bb.visualize("2D")
             #bb.visualize("3D")
             
-        #print "final round: ", i
-        #print "current axis"
-        #print current_axis
+        print "final round: ", i
+        # print "current axis"
+        # print current_axis
 
     def _get_bb_helper(self, axis, projection_axis_index, norm_axis_index):
         box = BoundingBox3D(self.pnts)
@@ -275,8 +338,13 @@ class ToolPointCloud(object):
     def visualize(self):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
+        if not self.segments is None:
+            c = self.segments
+        else:
+            c = 'b'
+
         ax.axis('equal')
-        ax.scatter(xs=self.pnts[:, 0], ys=self.pnts[:, 1], zs=self.pnts[:, 2], c='b')
+        ax.scatter(xs=self.pnts[:, 0], ys=self.pnts[:, 1], zs=self.pnts[:, 2], c=c)
         plt.show()
 
     def visualize_bb(self):
