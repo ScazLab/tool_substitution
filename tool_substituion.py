@@ -102,18 +102,42 @@ def project_pnt_on_bb_sides(pnt, bb):
 
     for k, v in bb_sides.items():
         p, _, c, n = v
-        # q = proj_on_plane(pnt, (p,n))
-        # projs.append(q)
-        projs.append(c)
-        scores.append((k, norm(c - pnt)))
+        q = proj_on_plane(pnt, (p,n))
+        projs.append(q)
+        scores.append((k, norm(q - pnt)))
 
     print(scores)
     side = min(scores, key=lambda t: t[1])
 
     return side[0], bb_sides, projs
 
+def get_closest_bb_side_to_pnt(pnt, bb):
+    """
+    Determines which bb side pnt is closest to pnt
+    by comparing point against side centroids.
+    returns: the closest side: str
+             A list of bb side info: tuple
+             The centroids of each bb side: ndarray
+    """
+    bb_sides = bb_to_planes(bb)
+    scores = []
+    centroids = []
+
+    for k, v in bb_sides.items():
+        p, _, c, n = v
+        centroids.append(c)
+        scores.append((k, norm(c - pnt)))
+
+    print(scores)
+    side = min(scores, key=lambda t: t[1])
+
+    return side[0], bb_sides, centroids
+
 
 def proj_on_plane(q, plane):
+    """
+    Orthogonal projection of pnt q on plane
+    """
     p, norm = plane
 
     return q  - np.dot(q - p, norm ) * norm
@@ -121,14 +145,18 @@ def proj_on_plane(q, plane):
 
 
 def bb_to_planes(bb):
-
+    """
+    Given a bb (10x3 ndarray) caluclate planes for each face of the box.
+    Returns dict where keys are [a-f; str] faces of box and vals are tuples.
+    Tuples contain: a pnt on the face (ndarray) the relative size of face (int, 0-2),
+                    the centroid (ndarray), and the norm of the plane (ndarray).
+    """
     bb_pnts = bb.bb
     bb_areas = [norm(bb.norms[0]) * norm(bb.norms[1]),
                 norm(bb.norms[0]) * norm(bb.norms[2]),
                 norm(bb.norms[1]) * norm(bb.norms[2])]
 
 
-    
     faces = {'a': bb_pnts[[0,3,2,1], :],
              'b': bb_pnts[[2,7,3,8], :],
              'c': bb_pnts[[5,0,3,8], :],
@@ -194,7 +222,9 @@ class ToolSubstitution(object):
         self.sub_tool = sub_tool_pc
 
     def _calc_best_orientation(self, src_pnts, sub_pnts, Rs):
-
+        """
+        Given a list of rotation matrices, R, determine f
+        """
         if not Rs:
             Rs.append(np.identity(3))
 
@@ -280,7 +310,7 @@ class ToolSubstitution(object):
 
         return self.sub_tool.get_segment_from_point(sub_action_pnt), aligned_sub_pnts
 
-    def _get_useable_sub_bb_sides(self):
+    def _calc_sub_contact_pnt(self):
         """
         Returns estimated contact point and rotation matrix for sub tool based on src tool.
 
@@ -329,10 +359,10 @@ class ToolSubstitution(object):
         src_adj_sides = [] # stores sides of action part bb that conenct to other segments
 
         for c in src_seg_centroids:
-            s,src_all_bb_sides, projs = project_pnt_on_bb_sides(c ,src_action_bb)
+            s,src_all_bb_sides, projs = get_closest_bb_side_to_pnt(c ,src_action_bb)
             src_adj_sides.append(s)
 
-        src_c_side, src_all_sides, _= project_pnt_on_bb_sides(src_cntct_pnt,
+        src_c_side, src_all_sides, _= get_closest_bb_side_to_pnt(src_cntct_pnt,
                                                                   src_action_bb)
 
         # If the contacting side is on a side that connects to another segment,
@@ -345,7 +375,7 @@ class ToolSubstitution(object):
         projs = []
         # Determine sides of bounding box adjacent to other segments
         for c in sub_seg_centroids:
-            s, sub_all_sides, projs = project_pnt_on_bb_sides(c ,sub_action_bb)
+            s, sub_all_sides, projs = get_closest_bb_side_to_pnt(c ,sub_action_bb)
             sub_adj_sides.append(s)
 
         # Remove duplicates
@@ -423,9 +453,6 @@ class ToolSubstitution(object):
                 Rs.append(R)
 
 
-        # _, aligned_sub_pnts= self._calc_best_orientation(self.centered_src_pc.pnts,
-        #                                                  scaled_sub_pc.pnts,
-        #                                                  Rs)
         _, aligned_sub_pnts= self._calc_best_orientation(src_action_pc.get_normalized_pc(),
                                                          scaled_sub_action_pc.get_normalized_pc(),
                                                          Rs)
@@ -510,7 +537,7 @@ class ToolSubstitution(object):
     def main(self):
         # TODO: Make sure contact point can be transformed properly and recovered
         # self._align_action_parts()
-        self._get_useable_sub_bb_sides()
+        self._calc_sub_contact_pnt()
 
 
 
@@ -541,7 +568,7 @@ if __name__ == '__main__':
 
     # bb = src.bb.bb
     # # pnt = bb[0, :] +
-    # proj, _ = project_pnt_on_bb_sides(pnt, bb)
+    # proj, _ = get_closest_bb_side_to_pnt(pnt, bb)
     # visualize_bb_pnt_proj(bb, pnt, proj)
 
     ts = ToolSubstitution(src, sub)
