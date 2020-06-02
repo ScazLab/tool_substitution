@@ -21,9 +21,11 @@ class ToolPointCloud(object):
             # First 3 columns are coords, last is segment
             self.pnts = pnts[:,[0,1,2]]
             self.segments = pnts[:,3].astype(np.int)
+            self.segment_list = np.unique(self.segments)
         else:
             self.pnts = pnts
-            self.segments = None
+            self.segments = np.repeat(1, pnts.shape[0])
+            self.segment_list = [1]
         self.eps = eps # Error term for deciding best bounding box
         self.mean = None
         self.bb = None # 10 by 3, the 5th and 10th is the reptead point
@@ -32,8 +34,11 @@ class ToolPointCloud(object):
         self.scales = []
         self.is_scaled = False
 
+        self.mean = self.pnts.mean(axis = 0)
+        self.normalize = normalize
         if normalize:
             self._normalize_pointcloud()
+
 
         self.contact_pnt_idx = contact_pnt_idx
         self.bounding_box()
@@ -223,7 +228,6 @@ class ToolPointCloud(object):
 
         aruco_frame = np.vstack([x_direction, y_direction, z_direction, centroid]).T
         aruco_frame = np.vstack([aruco_frame], np.array([0, 0, 0, 1]))
-
         self.aruco_frame[aruco_id] = aruco_frame
 
 
@@ -231,28 +235,35 @@ class ToolPointCloud(object):
     aruco related functions finished
     """
 
-    def get_axis(self):
-        return self.bb.get_normalized_axis()
+    def get_axis(self, axis_order=[0,1,2]):
+        axes = self.bb.get_normalized_axis()
+        return axes[:, axis_order]
 
     def transform(self, pnts):
         axes = self.get_axis()
         return np.dot(axes, pnts)
 
     def get_unnormalized_pc(self):
-        return self.pnts + self.mean
+        if self.normalize:
+            return self.pnts + self.mean
+        else:
+            return self.pnts
 
     def get_normalized_pc(self):
-        return self.pnts
+        if self.normalize:
+            return self.pnts
+        else:
+            return self.pnts - self.mean
 
     def get_pc_aruco_frame(self):
         unnomalized_pc = self.get_unnormalized_pc()
         return np.matmul(np.linalg.inv(self.aruco_frame), unnomalized_pc)
 
-    def get_pc_bb_axis_frame(self):
-        return np.matmul(np.linalg.inv(self.get_axis()), self.pnts.T).T
-    
-    def get_pc_bb_axis_frame_centered(self):
-        pc_bb_axis_frame = self.get_pc_bb_axis_frame()
+    def get_pc_bb_axis_frame(self, axis_order=[0,1,2]):
+        return np.matmul(np.linalg.inv(self.get_axis(axis_order)), self.pnts.T).T
+
+    def get_pc_bb_axis_frame_centered(self, axis_order=[0,1,2]):
+        pc_bb_axis_frame = self.get_pc_bb_axis_frame(axis_order)
         #print "pc_bb_axis_frame.shape: ", pc_bb_axis_frame.shape
         bb_trimed = self.bb.bb.copy()
         bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
@@ -260,7 +271,8 @@ class ToolPointCloud(object):
         #print "bb_trimed"
         #print bb_trimed
         # convert the bbs to the right frame:
-        bb_trimed_axis_frame = np.matmul(np.linalg.inv(self.get_axis()), bb_trimed.T).T
+        bb_trimed_axis_frame = np.matmul(np.linalg.inv(self.get_axis(axis_order)),
+                                         bb_trimed.T).T
         #print "bb_trimed_axis_frame"
         #print bb_trimed_axis_frame
         bb_centroid = np.mean(bb_trimed_axis_frame, axis=0)
@@ -273,7 +285,6 @@ class ToolPointCloud(object):
         return self.bb.bb_2d_projection(projection_index, norm_index, visualize)
 
     def _normalize_pointcloud(self):
-        self.mean = self.pnts.mean(axis = 0)
         self.pnts -= self.mean
 
     def bounding_box(self):
@@ -316,15 +327,15 @@ class ToolPointCloud(object):
             self.bb = bbs[vols.index(min(vols))]
             current_axis = self.bb.get_normalized_axis()
             # print "new current axis is"
-            # print current_axis            
+            # print current_axis
             # print "=================================================="
-                
+
             i += 1
-        
+
         #for bb in bbs:
             #bb.visualize("2D")
             #bb.visualize("3D")
-            
+
         print "final round: ", i
         # print "current axis"
         # print current_axis
@@ -349,4 +360,4 @@ class ToolPointCloud(object):
 
     def visualize_bb(self):
         self.bb.visualize("3D")
-        self.bb.visualize("2D")
+        # self.bb.visualize("2D")
