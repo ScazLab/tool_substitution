@@ -132,8 +132,6 @@ def visualize(pnts, cp, segments=None):
     plt.show()
 
 
-
-
 def project_pnt_on_bb_sides(pnt, bb):
     bb_sides = bb_to_planes(bb)
     scores = []
@@ -167,7 +165,8 @@ def get_closest_bb_side_to_pnt(pnt, bb):
         centroids.append(c)
         scores.append((k, norm(c - pnt)))
 
-    print(scores)
+    for k, s in scores:
+        print "{}: {}".format(k, s)
     side = min(scores, key=lambda t: t[1])
 
     return side[0], bb_sides, centroids
@@ -191,62 +190,63 @@ def bb_to_planes(bb):
                     the centroid (ndarray), and the norm of the plane (ndarray).
     """
     bb_pnts = bb.bb
+    axes = bb.get_normalized_axis()
+    ax1  = axes[:, 0]
+    ax2  = axes[:, 1]
+    ax3  = axes[:, 2]
     bb_areas = [norm(bb.norms[0]) * norm(bb.norms[1]),
                 norm(bb.norms[0]) * norm(bb.norms[2]),
                 norm(bb.norms[1]) * norm(bb.norms[2])]
 
 
-    faces = {'a': bb_pnts[[0,3,2,1], :],
+    faces = {'a': bb_pnts[[1,2,6,7], :],
              'b': bb_pnts[[2,7,3,8], :],
-             'c': bb_pnts[[5,0,3,8], :],
+             'c': bb_pnts[[5,8, 6,7], :],
              'd': bb_pnts[[1,6,5,0], :],
-             'e': bb_pnts[[5,8,7,6], :],
-             'f': bb_pnts[[1,6,2,7], :]}
+             'e': bb_pnts[[5,8,3,2], :],
+             'f': bb_pnts[[0,1,2,3], :]}
 
     # bb side areas from lowest to highest
     bb_areas  = sorted(bb_areas)
-    print("BB AREAS: {}".format(bb_areas))
+    # print("BB AREAS: {}".format(bb_areas))
 
-    n1 = cross(bb_pnts[2, :] - bb_pnts[3,:], bb_pnts[0, :] - bb_pnts[3, :])
-    n1 = n1 / norm(n1)
-    a1 = norm(bb_pnts[2, :] - bb_pnts[3,:]) * norm(bb_pnts[0, :] - bb_pnts[3, :])
+    # Get normal by by taking cross product of of bb side face
+    n1 = ax1
+    # Calculate area of face
+    a1 = norm(bb_pnts[2, :] - bb_pnts[7,:]) * norm(bb_pnts[6, :] - bb_pnts[7, :])
     a1 = np.argmin(np.abs(bb_areas - a1))
+    # Centroid of phase
     c1 = faces['a'].mean(axis=0)
-    s1 = (bb_pnts[3,:], a1, c1, n1)
+    s1 = (bb_pnts[7,:], a1, c1, n1)
 
-    n2 = cross(bb_pnts[7, :] - bb_pnts[8,:], bb_pnts[3, :] - bb_pnts[8, :])
-    n2 = n2 / norm(n2)
+    n2 = ax2
     a2 = norm(bb_pnts[7, :] - bb_pnts[8,:]) * norm( bb_pnts[3, :] - bb_pnts[8, :])
     a2 = np.argmin(np.abs(bb_areas - a2))
     c2 = faces['b'].mean(axis=0)
     s2 = (bb_pnts[8,:], a2, c2, n2)
 
-    n3 = cross(bb_pnts[0, :] - bb_pnts[3,:], bb_pnts[8, :] - bb_pnts[3, :])
-    n3 = n3 / norm(n3)
-    a3 = norm(bb_pnts[0, :] - bb_pnts[3,:]) * norm(bb_pnts[8, :] - bb_pnts[3, :])
+    n3 = ax3
+    a3 = norm(bb_pnts[7, :] - bb_pnts[8,:]) * norm(bb_pnts[5, :] - bb_pnts[8, :])
     a3 = np.argmin(np.abs(bb_areas - a3))
     c3 = faces['c'].mean(axis=0)
-    s3 = (bb_pnts[3,:], a3, c3, n3)
+    s3 = (bb_pnts[8,:], a3, c3, n3)
 
 
-    n4 = cross(bb_pnts[5, :] - bb_pnts[0,:], bb_pnts[1, :] - bb_pnts[0, :])
-    n4 = n4 / norm(n4)
-    a4 = norm(bb_pnts[5, :] - bb_pnts[0,:]) *  norm(bb_pnts[1, :] - bb_pnts[0, :])
+    n4 = ax2 * -1.
+    a4 = norm(bb_pnts[1, :] - bb_pnts[6,:]) *  norm(bb_pnts[5, :] - bb_pnts[6, :])
     a4 = np.argmin(np.abs(bb_areas - a4))
     c4 = faces['d'].mean(axis=0)
-    s4 = (bb_pnts[0,:], a4, c4, n4)
+    s4 = (bb_pnts[6,:], a4, c4, n4)
 
 
-    n5 = cross(bb_pnts[6, :] - bb_pnts[5,:], bb_pnts[8, :] - bb_pnts[5, :])
-    n5 = n5 / norm(n5)
-    a5 = norm(bb_pnts[6, :] - bb_pnts[5,:]) * norm( bb_pnts[8, :] - bb_pnts[5, :])
+    n5 = ax1 * -1.
+    a5 = norm(bb_pnts[0, :] - bb_pnts[5,:]) * norm( bb_pnts[8, :] - bb_pnts[5, :])
     a5 = np.argmin(np.abs(bb_areas - a5))
     c5 = faces['e'].mean(axis=0)
     s5 = (bb_pnts[5,:], a5, c5,  n5)
 
-    n6 = cross(bb_pnts[7, :] - bb_pnts[2,:], bb_pnts[1, :] - bb_pnts[2, :])
-    n6 = n6 / norm(n6)
-    a6 = norm(bb_pnts[7, :] - bb_pnts[2,:]) * norm(bb_pnts[1, :] - bb_pnts[2, :])
+    n6 = ax3 * -1.
+    a6 = norm(bb_pnts[3, :] - bb_pnts[2,:]) * norm(bb_pnts[1, :] - bb_pnts[2, :])
     a6 = np.argmin(np.abs(bb_areas - a6))
     c6 = faces['f'].mean(axis=0)
     s6 = (bb_pnts[2,:], a6, c6, n6)
