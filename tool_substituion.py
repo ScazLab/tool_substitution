@@ -8,7 +8,44 @@ from matplotlib.patches import Rectangle
 
 from tool_pointcloud import ToolPointCloud
 from sample_pointcloud import GeneratePointcloud
-from util import min_point_distance, r_y, rotation_matrix_from_vectors, visualize_two_pcs, rotation_matrix
+from util import (min_point_distance, rotation_matrix_from_vectors,
+                  weighted_min_point_distance, visualize_two_pcs,
+                  rotation_matrix_from_box_rots)
+
+from scipy.spatial.transform import Rotation as Rot
+
+from get_target_tool_pose import get_T_from_R_p, get_pnts_world_frame, get_aruco_world_frame
+
+class ArucoStuff(object):
+    def __init__(self, pc):
+        "docstring"
+        self.pc = pc
+
+
+    def get_aruco_intial_T(self):
+        pnts     = self.pc.get_unnormalized_pc()
+        centroid = pnts.mean(axis =0)
+        # R        = self.pc.get_axis()
+
+        return get_T_from_R_p(centroid)
+
+    def percieve_aruco_T(self):
+        p = np.random.unform(3)
+        R = np.array([
+            [0,  1, 0],
+            [-1, 0, 0],
+            [0,  0, -1]
+        ])
+
+        return get_T_from_R_p(p, R)
+
+    def get_src_tool_T(self):
+        p = np.random.unform(3)
+        R = np.array([
+            [0,  -1, 0],
+            [1, 0, 0],
+            [0,  0, 1]
+        ])
 
 
 
