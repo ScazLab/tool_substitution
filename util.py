@@ -142,8 +142,11 @@ def rbf(x1, x2, sigma = 1):
 
 
 def rotation_matrix_from_box_rots(sub_dir,src_dir):
-    sub_dir, src_dir = ((sub_dir / np.linalg.norm(sub_dir)).reshape(3),
-                                  (src_dir / np.linalg.norm(src_dir)).reshape(3))
+    sub_dir  = sub_dir / np.linalg.norm(sub_dir)
+    src_dir = src_dir / np.linalg.norm(src_dir)
+
+    print sub_dir
+    print src_dir
     v = np.cross(sub_dir, src_dir)
     c = np.dot(sub_dir, src_dir)
     theta = np.arccos(c)
