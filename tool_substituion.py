@@ -54,19 +54,21 @@ def visualize_candidate_sides(pnts, pc_bb, cand_sides, centroids, proj):
     ax = fig.add_subplot(111, projection='3d')
 
     bb = pc_bb.bb
-    faces = {'a': bb[[0,3,2,1], :],
+    faces = {'a': bb[[1,2,6,7], :],
              'b': bb[[2,7,3,8], :],
-             'c': bb[[5,0,3,8], :],
+             'c': bb[[5,6,7,8], :],
              'd': bb[[1,6,5,0], :],
-             'e': bb[[5,8,7,6], :],
-             'f': bb[[1,6,2,7], :]}
+             'e': bb[[0,5,8,3], :],
+             'f': bb[[3,2,1,0], :]}
 
     for face in faces.keys():
         c = 'g' if face in cand_sides else 'r'
-        # c = 'y' if face == 'a' else c
+        c = 'y' if face == 'f' else c
         side = art3d.Poly3DCollection([faces[face]])
         side.set_color(c)
-        side.set_alpha(0.4) # opacity
+        side.set_alpha(0.9) # opacity
+        # if c == 'g':
+        #     ax.add_collection3d(side)
         ax.add_collection3d(side)
     # Tool pointcloud
     ax.scatter(xs=pnts[:,0], ys=pnts[:, 1], zs=pnts[:, 2], c='b')
