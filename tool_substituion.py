@@ -259,8 +259,19 @@ class ToolSubstitution(object):
         "docstring"
         self.src_tool = src_tool_pc
         self.sub_tool = sub_tool_pc
+        self.sigma = 1.0 # variance of radial basis kernel
 
-    def _calc_best_orientation(self, src_pnts, sub_pnts, Rs):
+    def _center_and_align_pnts(self, pc):
+        """
+        Creates a centered and aligned ToolPointCloud from unaligned ToolPointCloud
+        """
+        pnts = pc.get_pc_bb_axis_frame_centered()
+        # Add the segment labels back in.
+        pnts = np.vstack([pnts.T, pc.segments]).T
+
+        return ToolPointCloud(pnts)
+
+    def _calc_best_orientation(self, src_pnts, sub_pnts, Rs, c_pnt):
         """
         Given a list of rotation matrices, R, determine f
         """
