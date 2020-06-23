@@ -10,11 +10,25 @@ from tool_pointcloud import ToolPointCloud
 from sample_pointcloud import GeneratePointcloud
 from util import (min_point_distance, rotation_matrix_from_vectors,
                   weighted_min_point_distance, visualize_two_pcs,
-                  rotation_matrix_from_box_rots)
+                  rotation_matrix_from_box_rots, visualize_vectors)
 
 from scipy.spatial.transform import Rotation as Rot
 
 from get_target_tool_pose import get_T_from_R_p, get_pnts_world_frame, get_aruco_world_frame
+
+
+def shrink_pc(pc):
+    shrink_ratio = .3
+    pnts = pc.get_pc_bb_axis_frame_centered()
+    x_min = pnts.min(axis=0)[0]
+    x_max = pnts.max(axis=0)[0]
+    x_len = x_max - x_min
+    
+    pnts = pnts[np.where(pnts[:,0] > x_min + (x_len * shrink_ratio)), :][0]
+    print pnts
+
+    return ToolPointCloud(pnts)
+
 
 class ArucoStuff(object):
     def __init__(self, pc):
