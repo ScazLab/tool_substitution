@@ -293,3 +293,33 @@ def visualize_two_pcs(pnts1, pnts2, s1=None, s2=None):
 
 
     plt.show()
+
+
+def visualize_vectors(vecs):
+    vecs = (vecs.T / np.linalg.norm(vecs, axis=1)).T
+    U, V, W = zip(*vecs)
+    n = vecs.shape[0]
+    X = np.zeros(n)
+    Y = np.zeros(n)
+    Z = np.zeros(n)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    
+    ax.set_xlim([-1, 1.])
+    ax.set_ylim([-1, 1.])
+    ax.set_zlim([-1, 1.])
+
+    ax.quiver(X, Y, Z, U, V, W)
+
+    plt.show()
+
+if __name__ == '__main__':
+    # src = np.array([1.40, -.20,-.20])
+    # src = np.array([0, -1.20, .20])
+    sub = np.array([-1,0,0])
+
+    R = rotation_matrix_from_box_rots(sub,src)
+    print "TARGET: ", src
+    print "RESULT: ", R.dot(sub.T)
