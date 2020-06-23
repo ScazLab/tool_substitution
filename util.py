@@ -251,7 +251,7 @@ def rotation_matrix_from_vectors(a, b):
 
 
 
-def visualize_two_pcs(pnts1, pnts2, s1=None, s2=None):
+def visualize_two_pcs(pnts1, pnts2, s1=None, s2=None, c1=None, c2=None):
     """
     Just plots two pointclouds for easy comparison.
     """
@@ -285,6 +285,11 @@ def visualize_two_pcs(pnts1, pnts2, s1=None, s2=None):
         side.set_color('b')
         ax.add_collection3d(side)
 
+    if not c1 is None:
+        ax.scatter(xs=c1[ 0], ys=c1[ 1], zs=c1[ 2], c='g', s=350)
+
+    if not c2 is None:
+        ax.scatter(xs=c2[ 0], ys=c2[ 1], zs=c2[ 2], c='y', s=350)
 
     ax.axis('equal')
     ax.scatter(xs=pnts1[:, 0], ys=pnts1[:, 1], zs=pnts1[:, 2], c='r')
