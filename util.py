@@ -144,40 +144,53 @@ def rbf(x1, x2, sigma = 1):
 def rotation_matrix_from_box_rots(sub_dir,src_dir):
     sub_dir  = sub_dir / np.linalg.norm(sub_dir)
     src_dir = src_dir / np.linalg.norm(src_dir)
+    # print "INITIAL ORIENTATION"
+    # visualize_vectors(np.vstack([  src_dir, sub_dir]))
 
     print sub_dir
     print src_dir
     v = np.cross(sub_dir, src_dir)
     c = np.dot(sub_dir, src_dir)
+    # cos_sim = cosine_similarity(sub)
     theta = np.arccos(c)
 
     eps = .15
     is_parallel =  np.isclose(np.linalg.norm(v), np.zeros(1), atol=eps).item()
     is_same_dir  = np.isclose(theta,  np.zeros(1), atol=eps).item()
+    print "SAME DIR: ", is_same_dir
+    print "IS PARALLEL: ", is_parallel
 
-    rots = [np.pi /2 , np.pi, 3 * np.pi / 2, 2 * np.pi]
+    # rots = [np.pi /2 , np.pi, 3 * np.pi / 2, 2 * np.pi]
+    rots = np.arange(np.pi /2, 2*np.pi, step=.10)
     scores = []
 
     if is_parallel and is_same_dir:
+        print "PC already pointing in right dir. No rotation required."
         return np.identity(3)
     elif not is_parallel:
         rot_vec = v
 
     else:
-        a = sub_dir
+        a = src_dir
         rot_vec = np.array([a[1], -a[0], 0.]) if a[2] < a[0] else np.array([0, -a[2], a[1]])
 
     for rot in rots:
-        rot_vec *= rot
+        rot_vec = rot_vec * rot
         R = Rot.from_rotvec(rot_vec)
         R = R.as_dcm()
         rot_sub_dir = R.dot(sub_dir.T)
+        # visualize_vectors(np.vstack([  src_dir, rot_sub_dir, rot_vec  ]))
+        # cosine_similarity(src_dir.reshape(1,-1),
+        #                                     rot_sub_dir.reshape(1,-1)).item()))
 
-        scores.append((R, cosine_similarity(rot_sub_dir.reshape(1,-1),
-                                            src_dir.reshape(1,-1))))
+        dir_score = np.arccos(np.dot(src_dir, rot_sub_dir))
+        scores.append((R, dir_score)) 
 
-    
-    return max(scores, key=lambda score: score[1])[0]
+    best_R, fitness = min(scores, key=lambda score: score[1])
+    print "BEST ROTATION COSINE SIM ", fitness
+    visualize_vectors(np.vstack([  src_dir, best_R.dot(sub_dir.T)]))
+
+    return best_R
 
 
 def rotation_matrix_from_vectors(a, b):
