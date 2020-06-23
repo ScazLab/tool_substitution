@@ -50,8 +50,9 @@ class ToolPointCloud(object):
         keeping side proportions constant.
         """
 
-        src_dim_lens   = self.bb.dim_lens
-        target_dim_lens = target_tpc.bb.dim_lens
+        # Get the len of the sides of each bounding box.
+        src_dim_lens   = self.bb.norms
+        target_dim_lens = target_tpc.bb.norms
 
 
         if keep_proportional:
@@ -68,11 +69,13 @@ class ToolPointCloud(object):
         else:
             scale_factor = target_dim_lens / src_dim_lens
 
-        # Scale points.
-        # self.pnts *= scale_factor
-        # self.bb.scale_bb(scale_factor)
 
-        return self.pnts * scale_factor
+        # Scale points along bb axis for proper scaling.
+        scaled_pnts = self.get_pc_bb_axis_frame_centered() * scale_factor
+        # Rotate scaled points back to original alignment.
+        scaled_pnts = np.linalg.inv(self.get_axis()).dot(scaled_pnts.T).T
+
+        return scaled_pnts, scale_factor
 
     def get_segment_from_point(self, idx):
         """
@@ -95,6 +98,7 @@ class ToolPointCloud(object):
 
     def get_pnt(self, i):
         return self.pnts[i, :]
+
 
     def get_bb(self):
         return self.bb
@@ -301,7 +305,7 @@ class ToolPointCloud(object):
         bbs = []
         self.bb = None
 
-        while not found_box or i == max_loop:
+        while not found_box and i <= max_loop:
             vols = []
             bbs = []
             for [projection_axis_index, norm_axis_index] in [[[0, 1], 2], [[0, 2], 1], [[1, 2], 0]]:
@@ -330,6 +334,7 @@ class ToolPointCloud(object):
             # print current_axis
             # print "=================================================="
 
+            print "i: ", i
             i += 1
 
         #for bb in bbs:
