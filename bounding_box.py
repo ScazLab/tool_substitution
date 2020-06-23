@@ -20,10 +20,25 @@ class BoundingBox(object):
         self.eps = eps
 
     def get_normalized_axis(self):
+        """
+        Returns the bounding box axes normalized and in descending size order.
+        """
         return self.normalized_axis
 
     def get_unnormalized_axis(self):
+        """
+        Returns the bounding box axes unnormalized and in descending size order.
+        """
         return self.unnormalized_axis
+
+    def get_unnormalized_unordered_axis(self):
+        """
+        Returns the bounding box axes unnormalized and unordered.
+        """
+        axis_1 = np.array([bb[1] - bb[0]]).T
+        axis_2 = np.array([bb[3] - bb[0]]).T
+        axis_3 = np.array([bb[5] - bb[0]]).T
+        return np.hstack([axis_1, axis_2, axis_3])
 
     def get_bb(self):
         return self.bb
@@ -213,7 +228,7 @@ class BoundingBox3D(BoundingBox):
         if self.norms is None:
             return
         return (self.norms[0] * self.norms[1] + self.norms[0] * self.norms[2] + self.norms[1] * self.norms[2]) * 2
-    
+
     def bb_2d_projection(self, projection_index, norm_index, visualize=True):
         print "in function"
         projection_frame = self.normalized_axis[:, [projection_index[0], projection_index[1], norm_index]]
@@ -222,9 +237,9 @@ class BoundingBox3D(BoundingBox):
         if visualize:
             print "visualize"
             bb.visualize()
-        
+
         return pnts_projection_frame.T[:, :-1], bb
-    
+
     def set_axis(self, axis = None):
         """
         The axis should be n by 3 (each COLUMN is an axis)
@@ -318,4 +333,5 @@ class BoundingBox3D(BoundingBox):
         axis_2 = np.array([bb[3] - bb[0]]).T
         axis_3 = np.array([bb[5] - bb[0]]).T
         unnormalized_unordered_axis = np.hstack([axis_1, axis_2, axis_3])
+
         return self._order_unnormalized_axis_from_axis(unnormalized_unordered_axis)
