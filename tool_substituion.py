@@ -2,6 +2,11 @@ import numpy as np
 from numpy import cross
 from numpy.linalg import norm
 
+from itertools import permutations
+
+import open3d as o3d
+
+
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D, art3d
 from matplotlib.patches import Rectangle
@@ -10,24 +15,14 @@ from tool_pointcloud import ToolPointCloud
 from sample_pointcloud import GeneratePointcloud
 from util import (min_point_distance, rotation_matrix_from_vectors,
                   weighted_min_point_distance, visualize_two_pcs,
-                  rotation_matrix_from_box_rots, visualize_vectors)
+                  rotation_matrix_from_box_rots, visualize_vectors,
+                  r_x, r_y, r_z)
 
 from scipy.spatial.transform import Rotation as Rot
 
 from get_target_tool_pose import get_T_from_R_p, get_pnts_world_frame, get_aruco_world_frame
+from pointcloud_registration import prepare_dataset, draw_registration_result
 
-
-def shrink_pc(pc):
-    shrink_ratio = .3
-    pnts = pc.get_pc_bb_axis_frame_centered()
-    x_min = pnts.min(axis=0)[0]
-    x_max = pnts.max(axis=0)[0]
-    x_len = x_max - x_min
-    
-    pnts = pnts[np.where(pnts[:,0] > x_min + (x_len * shrink_ratio)), :][0]
-    print pnts
-
-    return ToolPointCloud(pnts)
 
 
 class ArucoStuff(object):
@@ -63,73 +58,6 @@ class ArucoStuff(object):
 
 
 
-def visualize_candidate_sides(pnts, pc_bb, cand_sides, centroids, proj, c_point=None):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    bb = pc_bb.bb
-    faces = {'a': bb[[2,7,6,1], :],
-             'b': bb[[3,8,7,2], :],
-             'c': bb[[7,8,5,6], :],
-             'd': bb[[1,6,5,0], :],
-             'e': bb[[0,5,8,3], :],
-             'f': bb[[3,2,1,0], :]}
-
-    for face in faces.keys():
-        c = 'g' if face in cand_sides else 'r'
-        side = art3d.Poly3DCollection([faces[face]], alpha=.3)
-        side.set_color(c)
-        ax.add_collection3d(side)
-    # Tool pointcloud
-    ax.scatter(xs=pnts[:,0], ys=pnts[:, 1], zs=pnts[:, 2], c='b')
-
-    # Centroids
-    for c in centroids:
-        ax.scatter(xs=c[0], ys=c[1], zs=c[ 2], c='y', s=450)
-
-
-    for p in proj:
-        ax.scatter(xs=p[0], ys=p[1], zs=p[ 2], c='black', s=350)
-
-    if not c_point is None:
-        ax.scatter(xs=c_point[0], ys=c_point[1], zs=c_point[ 2], c='r', s=350)
-
-
-    plt.show()
-
-def visualize_bb_pnt_proj(bb, pnt, proj):
-    """Visualize points and bounding box"""
-
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-
-    centroid = np.vstack([pnt, bb.mean(axis=0)])
-    ax.axis('equal')
-
-    ax.scatter(xs=pnt[0], ys=pnt[1], zs=pnt[2], c='r', s=15)
-    ax.scatter(xs=proj[0], ys=proj[1], zs=proj[2], c='g', s=30)
-
-    ax.plot(centroid[:,0], centroid[:,1], centroid[:, 2], c='r')
-
-    ax.plot(bb.T[0], bb.T[1], bb.T[2], c='r')
-    ax.plot(bb[(1, 6), :].T[0], bb[(1, 6), :].T[1], bb[(1, 6), :].T[2], c='r')
-    ax.plot(bb[(2, 7), :].T[0], bb[(2, 7), :].T[1], bb[(2, 7), :].T[2], c='r')
-    ax.plot(bb[(3, 8), :].T[0], bb[(3, 8), :].T[1], bb[(3, 8), :].T[2], c='r')
-
-    plt.show()
-
-
-def calc_seg_centroids(segs, pc):
-    centroids = []
-
-    for s in segs:
-        pnts = pc.get_pnts_in_segment(s)
-        centroids.append(pnts.mean(axis=0))
-
-    return centroids
-
-
-
 def visualize(pnts, cp=None, segments=None):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -146,154 +74,27 @@ def visualize(pnts, cp=None, segments=None):
     plt.show()
 
 
-def project_pnt_on_bb_sides(pnt, bb):
-    bb_sides = bb_to_planes(bb)
-    scores = []
-    projs = []
-
-    for k, v in bb_sides.items():
-        p, _, c, n = v
-        n = n / norm(n) # normalize
-        q = proj_on_plane(pnt, (c, n))
-        projs.append(q)
-        print "{} proj: {}".format(k, q)
-        scores.append((k, norm(q - pnt)))
-
-    print(scores)
-    side = min(scores, key=lambda t: t[1])
-
-    return side[0], bb_sides, projs
-
-def get_closest_bb_side_to_pnt(pnt, bb):
-    """
-    Determines which bb side pnt is closest to pnt
-    by comparing point against side centroids.
-    returns: the closest side: str
-             A list of bb side info: tuple
-             The centroids of each bb side: ndarray
-    """
-    bb_sides = bb_to_planes(bb)
-    scores = []
-    centroids = []
-
-    for k, v in bb_sides.items():
-        p, _, c, n = v
-        centroids.append(c)
-        scores.append((k, norm(c - pnt)))
-
-    for k, s in scores:
-        print "{}: {}".format(k, s)
-    side = min(scores, key=lambda t: t[1])
-
-    return side[0], bb_sides, centroids
-
-
-def proj_on_plane(q, plane):
-    """
-    Orthogonal projection of pnt q on plane
-    """
-    p, norm = plane
-
-    return q  - np.dot(q - p, norm ) * norm
-
-
-
-def bb_to_planes(bb, use_areas=True):
-    """
-    Given a bb (10x3 ndarray) caluclate planes for each face of the box.
-    Returns dict where keys are [a-f; str] faces of box and vals are tuples.
-    Tuples contain: a pnt on the face (ndarray) the relative size of face (int, 0-2),
-                    the centroid (ndarray), and the norm of the plane (ndarray).
-    """
-    bb_pnts = bb.bb
-    # axes = bb.get_normalized_axis()
-    axes = bb.get_unnormalized_unordered_axis()
-    ax1  = axes[:, 0]
-    ax2  = axes[:, 1]
-    ax3  = axes[:, 2]
-
-    bb_areas = [norm(bb.norms[0]) * norm(bb.norms[1]),
-                norm(bb.norms[0]) * norm(bb.norms[2]),
-                norm(bb.norms[1]) * norm(bb.norms[2])]
-
-    bb_ratios = [min(abs(bb.norms[0]), abs(bb.norms[1])) / max(abs(bb.norms[0]),
-                                                               abs(bb.norms[1])),
-                min(abs(bb.norms[0]), abs(bb.norms[2])) / max(abs(bb.norms[0]),
-                                                               abs(bb.norms[2])),
-                min(abs(bb.norms[1]), abs(bb.norms[2])) / max(abs(bb.norms[1]),
-                                                               abs(bb.norms[2]))]
-
-
-    faces = {'a': bb_pnts[[2,7,6,1], :],
-             'b': bb_pnts[[3,8,7,2], :],
-             'c': bb_pnts[[7,8,5,6], :],
-             'd': bb_pnts[[1,6,5,0], :],
-             'e': bb_pnts[[0,5,8,3], :],
-             'f': bb_pnts[[3,2,1,0], :]}
-
-    # bb side areas from lowest to highest
-    if use_areas:
-        side_ranks = bb_areas
-        sorted_ranks  = sorted(bb_areas)
-    else:
-        side_ranks = bb_ratios
-        sorted_ranks  = sorted(bb_ratios)
-
-    # print("BB AREAS: {}".format(bb_areas))
-
-    # Get normal by by taking cross product of of bb side face
-    n1 = ax1
-    # Calculate area of face
-    a1 = side_ranks[2]
-    a1 = np.argmin(np.abs(sorted_ranks - a1))
-    # Centroid of phase
-    c1 = faces['a'].mean(axis=0)
-    s1 = (bb_pnts[7,:], a1, c1, n1)
-
-    n2 = ax2
-    a2 = side_ranks[1]
-    a2 = np.argmin(np.abs(sorted_ranks - a2))
-    c2 = faces['b'].mean(axis=0)
-    s2 = (bb_pnts[8,:], a2, c2, n2)
-
-    n3 = ax3
-    a3 = side_ranks[0]
-    a3 = np.argmin(np.abs(sorted_ranks - a3))
-    c3 = faces['c'].mean(axis=0)
-    s3 = (bb_pnts[8,:], a3, c3, n3)
-
-
-    n4 = ax2 * -1.
-    a4 = side_ranks[1]
-    a4 = np.argmin(np.abs(sorted_ranks - a4))
-    c4 = faces['d'].mean(axis=0)
-    s4 = (bb_pnts[6,:], a4, c4, n4)
-
-
-    n5 = ax1 * -1.
-    a5 = side_ranks[2]
-    a5 = np.argmin(np.abs(sorted_ranks - a5))
-    c5 = faces['e'].mean(axis=0)
-    s5 = (bb_pnts[5,:], a5, c5,  n5)
-
-    n6 = ax3 * -1.
-    a6 = side_ranks[0]
-    a6 = np.argmin(np.abs(sorted_ranks - a6))
-    c6 = faces['f'].mean(axis=0)
-    s6 = (bb_pnts[2,:], a6, c6, n6)
-
-    return {'a':s1, 'b':s2, 'c':s3, 'd':s4, 'e':s5, 'f':s6}
-
 
 class ToolSubstitution(object):
-    def __init__(self, src_tool_pc, sub_tool_pc, visualize=False):
+    def __init__(self, src_tool_pc, sub_tool_pc, voxel_size=0.02, visualize=False):
         "docstring"
         self.src_tool = src_tool_pc
         self.sub_tool = sub_tool_pc
-        self.sigma = 1.0 # variance of radial basis kernel
+
+        self.src_pcd = self._tpc_to_o3d(self.src_tool)
+        self.sub_pcd = self._tpc_to_o3d(self.sub_tool)
+
+        self.voxel_size = voxel_size
+        self.correspondence_thresh = voxel_size * .7
         self.visualize = visualize
-        # self.alignment_thresh = .33
-        self.alignment_thresh = .0001
+        self.Ts =[]
+
+    @staticmethod
+    def _tpc_to_o3d(tpc):
+         pcd = o3d.geometry.PointCloud()
+         pcd.points = o3d.utility.Vector3dVector(tpc.pnts)
+
+         return pcd
 
     def _center_and_align_pnts(self, pc):
         """
@@ -305,7 +106,7 @@ class ToolSubstitution(object):
 
         return ToolPointCloud(pnts)
 
-    def _calc_best_orientation(self, src_pnts, sub_pnts, Rs, c_pnt):
+    def _calc_best_orientation(self, src_pnts, sub_pnts, Rs):
         """
         Given a list of rotation matrices, R, determine f
         """
@@ -315,21 +116,24 @@ class ToolSubstitution(object):
         scores = []
         aligned_pnts = []
         for R in Rs:
-            sub_pnts_rot = R.dot(sub_pnts.T)
-            visualize_two_pcs(src_pnts, sub_pnts_rot.T)
-            # visualize_two_pcs(sub_pnts, sub_pnts_rot.T)
+            sub_pnts_rot = R.dot(sub_pnts.T).T
+            sub_o3d = o3d.geometry.PointCloud()
+            src_o3d = o3d.geometry.PointCloud()
 
-            # Average scores due to slight asymmetry in distance metric.
-            # score1 = min_point_distance(src_pnts.T, sub_pnts_rot)
-            # score2 = min_point_distance(sub_pnts_rot, src_pnts.T)
-            score1 = weighted_min_point_distance(src_pnts.T, sub_pnts_rot, c_pnt, self.sigma)
-            score2 = weighted_min_point_distance(sub_pnts_rot, src_pnts.T, c_pnt, self.sigma)
+            sub_o3d.points = o3d.utility.Vector3dVector(sub_pnts_rot)
+            src_o3d.points = o3d.utility.Vector3dVector(src_pnts)
 
-            score = (score1 + score2) / 2.0
+            dist = o3d.registration.evaluate_registration(src_o3d, sub_o3d,
+                                                          self.correspondence_thresh)
+            # score = np.asarray(dist).mean()
+            score = dist.fitness
+
+            print "ALIGNMENT SCORE: ", score
+
             scores.append(score)
-            aligned_pnts.append(sub_pnts_rot.T)
+            aligned_pnts.append(sub_pnts_rot)
 
-        i = np.argmin(scores)
+        i = np.argmax(scores)
 
         print "rotation {} is best".format(i + 1)
         return Rs[i], aligned_pnts[i], scores[i]
@@ -347,274 +151,34 @@ class ToolSubstitution(object):
         print("{}, type:{}".format(idx, type(idx)))
         return idx
 
-    def _align_pnts(self, src_pc, sub_pc):
+    def _align_pnts(self):
         """
         Scale sub_pc to and then detemine most similar orientation to src_pc
         Returns ndarray of sub_pc pnts in best orientation.
         """
 
-
-        scaled_sub_pnts, _ = sub_pc.scale_pnts_to_target(src_pc)
-        scaled_sub_pc = ToolPointCloud(scaled_sub_pnts)
-
-        # aligned_sub_pnts = scaled_sub_pc.get_pc_bb_axis_frame_centered()
-        # aligned_src_pnts = src_pc.get_pc_bb_axis_frame_centered()
-        aligned_sub_pnts = scaled_sub_pc.pnts
-        aligned_src_pnts = src_pc.pnts
-
         # Test current orientation
         R1 = np.identity(3)
-        # Test orientation rotated 180 degrees along first axis
-        R2 = np.identity(3)
-        R2[:, 0] =  -1. * R1[:,0]
-
-        src_cntct_pnt = self.centered_src_pc.get_pnt(self.src_tool.contact_pnt_idx)
-
-        return self._calc_best_orientation(src_pc.pnts,
-                                           scaled_sub_pc.pnts,
-                                           [R1, R2],
-                                           src_cntct_pnt)
-
-
-
-    def _get_sub_tool_action_part(self):
-
-        self.centered_src_pc = self._center_and_align_pnts(self.src_tool)
-        self.centered_sub_pc = self._center_and_align_pnts(self.sub_tool)
-
-        # Find the best alignment of the sub tool based on 3d haming distance.
-        R, aligned_sub_pnts, score = self._align_pnts(self.centered_src_pc,
-                                                  self.centered_sub_pc)
-
-
-
-        # visualize_two_pcs(src_pnts, aligned_sub_pnts)
-        src_contact_pnt = self.centered_src_pc.get_pnt(self.src_tool.contact_pnt_idx)
-        sub_action_pnt = self._get_closest_pnt(src_contact_pnt, aligned_sub_pnts)
-
-        return (self.sub_tool.get_segment_from_point(sub_action_pnt),
-                aligned_sub_pnts, R, score)
-
-    def _score_segment(self, sub_pc, src_action_pc, sub_action_seg, src_cntc_info):
-        """
-        Aligns a segment of sub tool to src tool contact surface and calculates
-        contact point and alignment score for segment.
-        """
-
-        # The relative size of src contact surface, the surface normal and
-        # a bool signifying whether the contact surface is also a surface
-        # adjacent to another segment (This might happen for a pulling obj).
-        rel_size, src_c_side_norm, src_c_side_centorid, cntct_on_adj_side = src_cntc_info
-        sub_other_segs = [s for s in sub_pc.segment_list \
-                          if not s == sub_action_seg]
-
-        print("sub other segs: {}".format(sub_other_segs))
-
-        # Get centroids of bb sides in order to help determine which sides
-        # Should be considered as contact surfaces.
-
-        sub_seg_pnts = sub_pc.get_pnts_in_segment(sub_action_seg)
-        # sub_seg_pnts = np.vstack([sub_seg_pnts.T, self.sub_tool.segments]).T
-        sub_seg_pc = ToolPointCloud(sub_seg_pnts, normalize=False)
-        sub_seg_bb = sub_seg_pc.bb
-
-        sub_seg_centroids = calc_seg_centroids(sub_other_segs,
-                                               sub_pc)
-        # Scale sub action part to src action part size for better comparison.
-        scaled_sub_action_pnts, scale_f = sub_seg_pc.scale_pnts_to_target(src_action_pc)
-        scaled_sub_seg_pc = ToolPointCloud(scaled_sub_action_pnts, normalize=False)
-
-        sub_action_bb = sub_seg_pc.bb
-        # visualize_two_pcs(scaled_sub_seg_pc.pnts, sub_seg_pc.pnts)
-
-        sub_seg_centroids = calc_seg_centroids(sub_other_segs,
-                                               sub_pc)
-
-        # visualize_two_pcs(sub_seg_pc.pnts, self.centered_sub_pc.pnts)
-        src_cntct_pnt = self.centered_src_pc.get_pnt(self.src_tool.contact_pnt_idx)
-
-        sub_adj_sides = []
-        sub_all_sides = {}
-        projs = []
-
-        for c in sub_seg_centroids:
-            s, sub_all_sides, projs = get_closest_bb_side_to_pnt(c ,sub_seg_bb)
-            sub_adj_sides.append(s)
-
-        # Remove duplicates
-        sub_adj_sides = list(set(sub_adj_sides))
-        cand_sides = [s for s in sub_all_sides.keys() if not s in sub_adj_sides]
-
-
-        if cntct_on_adj_side and sub_adj_sides:
-            # cand_sides = [s for s in sub_all_sides.keys() if s in sub_adj_sides]
-            cand_sides = sub_adj_sides
-        # Otherwise we consider non-adj sides11
-        else:
-            print "REL SIZE OF SRC CNTCT SURFACE: ", rel_size
-            cand_sides = [s for s in sub_all_sides.keys() if not s in sub_adj_sides]
-            # sub_same_size_sides = [k for k in cand_sides if sub_all_sides[k][1] == rel_size]
-            # cand_sides = sub_same_size_sides if sub_same_size_sides else cand_sides
-            # print "SUB SAME SIDES: ", sub_same_size_sides
-            print "CANDIDATE SIDES: ", cand_sides
-
-
-
-        if self.visualize:
-            visualize_candidate_sides(sub_seg_pc.pnts,
-                                        sub_seg_bb,
-                                        cand_sides,
-                                        sub_seg_centroids,
-                                        projs)
-
-
-        Rs = [] # Stores all candidate rotation martices
-        aligned_Rs = []
-        # First test sides of sub tool that are same relative size
-        # to contact side of src tool.
-        for s in cand_sides:
-            sub_dir = sub_all_sides[s][3]
-            sub_centroid = sub_all_sides[s][2]
-
-            # If norms are already parallel, then rotating
-            # them gives wrong answer for some reason.
-            print "CURR DIR ", sub_dir
-            print "GOAL DIR ", src_c_side_norm
-            R = rotation_matrix_from_box_rots(sub_dir, src_c_side_norm)
-            print "RESULT ", R.dot(sub_dir)
-            new_seg_bb = R.dot(sub_seg_bb.bb.T).T
-
-
-
-            aligned_Rs.append(( R, src_c_side_centorid, sub_centroid ))
-            Rs.append(R)
-
-        # Determine the contact point of src tool in action part segment point cloud
-        score = self._calc_best_orientation(src_action_pc.get_normalized_pc(),
-                                            scaled_sub_seg_pc.get_normalized_pc(),
-                                            Rs,
-                                            src_cntct_pnt)
-
-        return score
-
-
-    def get_contact_pnt(self):
-        # Get segment of contact point of src tool.
-        src_action_seg = self.src_tool.get_segment_from_point(self.src_tool.contact_pnt_idx)
-        # Determine the corresponding segment based on shape in sub tool.
-        sub_action_seg, scaled_sub_pnts, init_R, score = self._get_sub_tool_action_part()
-
-        # If a good alignment cannot be found using the entire sub tool,
-        # Then we test all segments of the sub tool against the action segment.
-        alignment_thresh = self.centered_src_pc.bb.dim_lens[0] * self.alignment_thresh
-        print "ALIGNMENT THRESH ", alignment_thresh
-        print "SCORE ", score
-        if score > alignment_thresh:
-            print "TESTING ALL SEGMENTS"
-            sub_segments =  self.sub_tool.segment_list
-
-        # Otherwise we use the estimated action segment found above.
-        else:
-            print "TESTING SEGMENT ", sub_action_seg
-            sub_segments = [sub_action_seg]
-
-        scaled_sub_pnts = np.vstack([scaled_sub_pnts.T, self.sub_tool.segments]).T
-        scaled_sub_pc = ToolPointCloud(scaled_sub_pnts, normalize=False)
-
-        print("src action seg: {}".format(src_action_seg))
-        print("sub action seg: {}".format(sub_action_seg))
-
-        # Segments of tools that aren't the action segments
-        src_other_segs = [s for s in self.centered_src_pc.segment_list \
-                          if not s == src_action_seg]
-
-        print("src other segs: {}".format(src_other_segs))
-
-        # Get centroids of bb sides in order to help determine which sides
-        # Should be considered as contact surfaces.
-        src_seg_centroids = calc_seg_centroids(src_other_segs, self.centered_src_pc)
-        # sub_seg_centroids = calc_seg_centroids(sub_other_segs, scaled_sub_pc)
-
-        # Get pointclouds corresponding to action parts of each tool.
-        src_action_pnts = self.centered_src_pc.get_pnts_in_segment(src_action_seg)
-        src_action_pc = ToolPointCloud(src_action_pnts, normalize=False)
-        src_action_pnts = src_action_pc.pnts
-        src_action_bb = src_action_pc.bb
-
-        src_cntct_idx = self.centered_src_pc.idx_to_segment_idx(self.src_tool.contact_pnt_idx)
-        src_cntct_pnt = src_action_pc.get_pnt(src_cntct_idx)
-
-        src_adj_sides = [] # stores sides of action part bb that conenct to other segments
-
-        projs = []
-        for c in src_seg_centroids:
-            s,src_all_sides, _ = get_closest_bb_side_to_pnt(c ,src_action_bb)
-            src_adj_sides.append(s)
-
-        # src_c_side, src_all_sides, _= get_closest_bb_side_to_pnt(src_cntct_pnt,
-        #                                                           src_action_bb)
-        # Project contact point on bb sides to determine closest bb side.
-        src_c_side, src_all_sides, projs= project_pnt_on_bb_sides(src_cntct_pnt,
-                                                              src_action_bb)
-
-        print "SOURCE CONTACT SIDE: ", src_c_side
-
-        if self.visualize:
-            visualize_candidate_sides(src_action_pnts,
-                                      src_action_bb,
-                                      [src_c_side],
-                                      src_seg_centroids,
-                                      projs,
-                                      src_cntct_pnt)
-
-        _, rel_size, src_c_centroid, n = src_all_sides[src_c_side]
-
-        # If the contacting side is on a side that connects to another segment,
-        # Then the tool is likely being used for pulling, and similar sides
-        # ought to be considered on the sub tool.
-        cntct_on_adj_side = src_c_side in src_adj_sides
-
-        src_cntct_info = (rel_size, n, src_c_centroid, cntct_on_adj_side)
+        R2 = r_x(np.pi)
+        R3 = r_y(np.pi)
+        R4 = r_z(np.pi)
 
         scores = []
-        for seg in sub_segments:
-            # score = self._score_segment(scaled_sub_pc, src_action_pc,
-            #                             seg, src_cntct_info)
-            score = self._score_segment(self.centered_sub_pc, src_action_pc,
-                                        seg, src_cntct_info)
-            scores.append((score[0], score[1], score[2], seg))
-
-        best_R, best_sub_pnts, _,  seg  = min(scores, key=lambda s: s[2])
+        # Ger perms of all indx
+        _, scale_f = self.scaled_sub_pc.scale_pnts_to_target(self.scaled_src_pc)
+        for p in permutations([0,1,2]):
+            permed_scale_f = scale_f[list(p)]
+            scaled_sub_pnts = self.scaled_sub_pc.pnts * permed_scale_f
 
 
-        # src_cntct_idx = self.centered_src_pc.idx_to_segment_idx(self.src_tool.contact_pnt_idx)
-        src_cntct_idx = self.src_tool.idx_to_segment_idx(self.src_tool.contact_pnt_idx)
-        # src_action_contact_pnt = src_action_pc.get_pnt(src_cntct_idx)
-        src_action_contact_pnt = src_action_pc.get_normalized_pc()[src_cntct_idx, :]
-        src_orig_contact_pnt = self.src_tool.get_normalized_pc()[src_cntct_idx, :]
-        # src_orig_contact_pnt = self.centered_src_pc.get_normalized_pc()[src_cntct_idx, :]
-        sub_action_c_pnt_idx = self._get_closest_pnt(src_action_contact_pnt,
-                                                    best_sub_pnts)
-        # sub_action_c_pnt_idx = self._get_closest_pnt(src_orig_contact_pnt,
-        #                                             best_sub_pnts)
-        # Get pnts corresponding to these segments
-        # sub_cntct_pnt = centered_sub_pc.get_pnt(sub_contact_pnt_idx)
-        sub_contact_pnt_idx = self.sub_tool.segment_idx_to_idx(seg,
-                                                                 sub_action_c_pnt_idx)
-        sub_cntct_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
+            R, rot_sub_pnts, score = self._calc_best_orientation(self.scaled_src_pc.pnts,
+                                                                scaled_sub_pnts,
+                                                                [R1, R2, R3, R4])
 
+            scores.append((R, rot_sub_pnts, score))
 
+        return max(scores, key=lambda s: s[2])
 
-        if self.visualize:
-            visualize(self.centered_src_pc.pnts, src_cntct_pnt,
-                    self.centered_src_pc.segments)
-            visualize(self.sub_tool.get_normalized_pc(),
-                    sub_cntct_pnt, self.sub_tool.segments)
-
-
-        ret_R = self.centered_sub_pc.get_axis().dot(best_R)
-
-        return ret_R, sub_cntct_pnt
 
 
 
@@ -640,6 +204,170 @@ class ToolSubstitution(object):
 
         return R, sub_contact_pnt
 
+
+
+    def _scale_pcs(self):
+
+        self.centered_src_pc = self._center_and_align_pnts(self.src_tool)
+        self.centered_sub_pc = self._center_and_align_pnts(self.sub_tool)
+
+        src_norm = self.centered_src_pc.bb.norms[0]
+        sub_norm = self.centered_sub_pc.bb.norms[0]
+
+        largest_span = src_norm if src_norm > sub_norm else sub_norm
+
+        scaled_src_pnts = self.centered_src_pc.pnts *  1.0 / largest_span
+        scaled_sub_pnts = self.centered_sub_pc.pnts *  1.0 / largest_span
+
+        T_align = get_T_from_R_p(np.zeros((1,3)), self.sub_tool.get_axis())
+        T_inv   = get_T_from_R_p(np.zeros((1,3)), np.linalg.inv(self.src_tool.get_axis()))
+        self.Ts.append(T_align) # To account fot alignment of sub tool along bb axis.
+        self.Ts.append(T_inv) # To account for alignment of src tool along bb axis.
+
+        self.scaled_src_pc = ToolPointCloud(scaled_src_pnts)
+        self.scaled_sub_pc = ToolPointCloud(scaled_sub_pnts)
+
+
+    def icp_alignment(self, n_iter=10):
+        # Scale points to be ~1 meter so that self.voxel_size can
+        # be consistent for all pointclouds.
+        self._scale_pcs()
+
+        # Find best initial alignment.
+        init_R, sub_pnts, align_fit = self._align_pnts()
+        T_init = get_T_from_R_p(np.zeros(3).reshape(1,-1), init_R)
+
+        distance_threshold = self.voxel_size * 2
+
+        src_pnts = self.scaled_src_pc.pnts
+
+        source, substitute, source_down, substitute_down, source_fpfh, substitute_fpfh = \
+            prepare_dataset(src_pnts, sub_pnts, self.voxel_size)
+
+        checker = [
+            o3d.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+            o3d.registration.CorrespondenceCheckerBasedOnDistance(self.correspondence_thresh),
+            o3d.registration.CorrespondenceCheckerBasedOnNormal(np.pi/2)
+                   ]
+
+
+        RANSAC = o3d.registration.registration_ransac_based_on_feature_matching
+
+        est_ptp = o3d.registration.TransformationEstimationPointToPoint()
+        est_ptpln = o3d.registration.TransformationEstimationPointToPlane()
+
+        criteria = o3d.registration.RANSACConvergenceCriteria(max_iteration=400000,
+                                                              max_validation=1000)
+
+        results = []
+        for i in range(n_iter):
+            result_icp = RANSAC(source_down, substitute_down, source_fpfh, substitute_fpfh,
+                                max_correspondence_distance=self.correspondence_thresh,
+                                estimation_method=est_ptp,
+                                ransac_n=4,
+                                checkers=checker,
+                                criteria=criteria
+            )
+
+            print "Final fitness: ", result_icp.fitness
+            results.append(result_icp)
+
+        best_icp = max(results, key=lambda i:i.fitness)
+
+        icp_fit = best_icp.fitness
+        icp_trans = best_icp.transformation
+
+        if align_fit < icp_fit:
+            trans = icp_trans
+            fit   = icp_fit
+        else:
+            trans = T_init
+            fit   = align_fit
+            self.Ts.append(T_init)
+
+        return trans, fit, source, substitute
+
+    def get_sub_contact_point_icp(self, n_iter=2):
+
+        # Apply initial icp alignment
+        init_trans, init_fit, source, substitute = self.icp_alignment(n_iter)
+
+        pose_graph = o3d.registration.PoseGraph()
+        accum_pose = np.identity(4)
+        pose_graph.nodes.append(o3d.registration.PoseGraphNode(accum_pose))
+
+        pcds = [source, substitute]
+        n_pcds = len(pcds)
+        for source_id in range(n_pcds):
+            for target_id in range(source_id + 1, n_pcds):
+                src = pcds[source_id]
+                sub = pcds[target_id]
+
+                GTG_mat = o3d.registration.get_information_matrix_from_point_clouds(sub, src,
+                                                                                    self.voxel_size,
+                                                                                    init_trans)
+
+                if target_id == source_id + 1:
+                    accum_pose = np.matmul(init_trans, accum_pose)
+ 
+                pose_graph.nodes.append(o3d.registration.PoseGraphNode(np.linalg.inv(accum_pose)))
+
+                pose_graph.edges.append(o3d.registration.PoseGraphEdge(source_id,
+                                                                target_id,
+                                                                init_trans,
+                                                                GTG_mat,
+                                                                uncertain=True))
+
+        solver = o3d.registration.GlobalOptimizationLevenbergMarquardt()
+        criteria = o3d.registration.GlobalOptimizationConvergenceCriteria()
+        option = o3d.registration.GlobalOptimizationOption(max_correspondence_distance=self.voxel_size / 10,
+                                                           edge_prune_threshold=self.voxel_size / 10,
+                                                           reference_node=0)
+
+        o3d.registration.global_optimization(pose_graph,
+                                            method=solver,
+                                            criteria=criteria,
+                                            option=option)
+
+        trans_pcds = [pcd for pcd in pcds] # deep copy
+        fitnesses  = []
+        # Apply calculated transformations to pcds
+        for pcd_id in range(n_pcds):
+            trans = pose_graph.nodes[pcd_id].pose
+            print trans
+            trans_pcds[pcd_id].transform(trans)
+            fit = o3d.registration.evaluate_registration(trans_pcds[0],
+                                                         trans_pcds[1],
+                                                         self.correspondence_thresh).fitness
+            fitnesses.append(fit)
+
+        # If these new transformations lower fit score, dont apply them.
+        if fitnesses[1] > init_fit:
+            aligned_sub = np.asarray(trans_pcds[1].points)
+            trans = pose_graph.nodes[1].pose
+            self.Ts.append(trans)
+        else:
+            print "USING INITIAL ICP RESULTS"
+            aligned_sub = np.asarray(pcds[1].points)
+            trans = init_trans
+
+        # Get sub contact point with transformed sub pc.
+        aligned_src = np.asarray(trans_pcds[1].points)
+        src_contact_pnt = aligned_src[self.src_tool.contact_pnt_idx, :]
+
+        sub_contact_pnt_idx = self._get_closest_pnt(src_contact_pnt,
+                                                    aligned_sub)
+
+        sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
+
+        o3d.visualization.draw_geometries(trans_pcds, "Aligned")
+        final_trans = np.linalg.multi_dot(self.Ts)
+        # o3d.visualization.draw_geometries([self.src_pcd,
+        #                                    self.sub_pcd.transform(final_trans)])
+
+        return sub_contact_pnt, final_trans
+
+
     def calc_sub_tool_aruco(self, R):
         aruco = ArucoStuff(self.sub_tool)
         # First, Get the initial pose of the sub tool
@@ -664,7 +392,8 @@ class ToolSubstitution(object):
         # TODO: Make sure contact point can be transformed properly and recovered
         # self._align_action_parts()
         # cntct_pnt, R  = self._calc_sub_contact_pnt()
-        self.get_contact_pnt()
+        # self.get_contact_pnt()
+        self.get_sub_contact_point_icp(n_iter=8)
         # self.get_random_contact_pnt()
         # c_point, R = self._find_best_segment()
 
@@ -672,19 +401,26 @@ class ToolSubstitution(object):
 
 if __name__ == '__main__':
     gp = GeneratePointcloud()
-    n = 4000
+    n = 10000
     get_color = True
 
     pnts1 = gp.get_random_ply(n, get_color)
     pnts2 = gp.get_random_ply(n, get_color)
+
+    # pnts2 = gp.mesh_to_pointcloud("./tool_files/point_clouds/a_knifekitchen2.ply", n)
+    # pnts2 = gp.mesh_to_pointcloud("a_knifekitchen3/2/a_knifekitchen3_out_8_60_fused.ply", n)
+    # pnts2 = gp.load_pointcloud("./tool_files/point_clouds/a_bowlchild.ply", None)
+    # pnts2 = gp.mesh_to_pointcloud("/rake_remove_box/2/rake_remove_box_out_2_40_fused.ply", n)
     # pnts1 = gp.mesh_to_pointcloud('ranch/3/ranch_out_6_20_fused.ply',n,  get_color)
-    # pnts2 = gp.mesh_to_pointcloud('hammer/2/hammer_out_3_10_fused.ply',n , get_color)
-    # pnts1 = gp.mesh_to_pointcloud('screwdriver_right/3/screwdriver_right_out_7_40_fused.ply',n,  get_color)
+    # pnts1 = gp.mesh_to_pointcloud('hammer/2/hammer_out_3_10_fused.ply',n , get_color)
+    # pnts1 = gp.mesh_to_pointcloud('chineseknife_1_3dwh/2/chineseknife_1_3dwh_out_4_60_fused.ply',n , get_color)
+    # pnts1 = gp.load_pointcloud('./tool_files/point_clouds/a_bowl.ply', None)
+    # pnts1 = gp.mesh_to_pointcloud('a_knifekitchen2/2/a_knifekitchen2_out_4_60_fused.ply',n , get_color)
     # pnts1 = gp.mesh_to_pointcloud('clamp_left/2/clamp_left_out_2_10_fused.ply',n,  get_color)
-    # pnts2 = gp.mesh_to_pointcloud('screwdriver_right/2/screwdriver_right_out_2_20_fused.ply',n , get_color)
+    # pnts1 = gp.mesh_to_pointcloud('screwdriver_right/2/screwdriver_right_out_2_20_fused.ply',n , get_color)
     # pnts2 = gp.mesh_to_pointcloud('clamp_right/2/clamp_right_out_3_10_fused.ply', n, get_color)
 
-    "./tool_files/data_demo_segmented_numbered/screwdriver_right/2/screwdriver_right_out_2_20_fused.ply"
+    "./tool_files/data_demo_segmented_numbered/rake_remove_box/2/rake_remove_box_out_2_40_fused.ply"
     src = ToolPointCloud(pnts1, contact_pnt_idx=None)
 
     # src.visualize_bb()
@@ -692,18 +428,22 @@ if __name__ == '__main__':
     # src = sub
     # sub = shrink_pc(sub)
 
-    cntc_pnt = src.get_pc_bb_axis_frame_centered().argmax(axis=0)[0]
-    # cntc_pnt = np.random.randint(0, src.pnts.shape[0], size = 1).item()
-    src.contact_pnt_idx = cntc_pnt
-    # src.contact_pnt_idx = cntc_pnt
+    cntct_pnt = src.get_pc_bb_axis_frame_centered().argmax(axis=0)[1]
+    cntct_pnt2 = sub.get_pc_bb_axis_frame_centered().argmax(axis=0)[0]
+    # cntct_pnt = np.random.randint(0, src.pnts.shape[0], size = 1).item()
+    # cntct_pnt = src.pnts.argmin(axis=0)[0]
+    src.contact_pnt_idx = cntct_pnt
 
-    hammer_pnt = sub.pnts.argmax(axis=0)[0]
+
     print("SRC TOOL")
     # src.visualize()
-    visualize(src.pnts, src.get_pnt(cntc_pnt))
+    # visualize(src.pnts, src.get_pnt(cntct_pnt), src.segments)
     print("SUB TOOL")
     # sub.visualize_bb()
-    visualize(sub.pnts, sub.get_pnt(hammer_pnt), segments=sub.segments)
+    # sub_seg = [1 if sub.pnts[i,0] > -0.024 else 0 for i in range(sub.pnts.shape[0])]
+    # sub.segments=sub_seg
+    # visualize(sub.pnts, sub.get_pnt(cntct_pnt2), segments=sub.segments)
+    # sub = ToolPointCloud(np.vstack([pnts2.T, sub_seg]).T)
 
-    ts = ToolSubstitution(src, sub, visualize=True)
+    ts = ToolSubstitution(src, sub, voxel_size=0.02, visualize=False)
     ts.main()
