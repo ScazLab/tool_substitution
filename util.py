@@ -188,7 +188,7 @@ def rotation_matrix_from_box_rots(sub_dir,src_dir):
 
     best_R, fitness = min(scores, key=lambda score: score[1])
     print "BEST ROTATION COSINE SIM ", fitness
-    visualize_vectors(np.vstack([  src_dir, best_R.dot(sub_dir.T)]))
+    # visualize_vectors(np.vstack([  src_dir, best_R.dot(sub_dir.T)]))
 
     return best_R
 
@@ -248,6 +248,31 @@ def rotation_matrix_from_vectors(a, b):
 
     # if R.dot(src_c_side_dir)
     return R
+
+
+
+def r_x(a):
+    return np.array([
+            [1., 0., 0.],
+            [0., np.cos(a), -np.sin(a)],
+            [0., np.sin(a), np.cos(a)]
+        ])
+
+
+def r_y(a):
+        return np.array([
+            [np.cos(a), 0, np.sin(a)],
+            [0, 1, 0],
+            [-np.sin(a), 0,  np.cos(a)]
+        ])
+
+def r_z(a):
+        return  np.array([
+            [np.cos(a), -np.sin(a), 0],
+            [np.sin(a), np.cos(a), 0],
+            [0, 0, 1]
+        ])
+
 
 
 
