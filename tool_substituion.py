@@ -36,10 +36,10 @@ class ArucoStuff(object):
         centroid = pnts.mean(axis =0)
         # R        = self.pc.get_axis()
 
-        return get_T_from_R_p(centroid)
+        return get_T_from_R_p(centroid.reshape(1,-1))
 
     def percieve_aruco_T(self):
-        p = np.random.unform(3)
+        p = np.random.uniform(size=(1,3))
         R = np.array([
             [0,  1, 0],
             [-1, 0, 0],
@@ -49,12 +49,15 @@ class ArucoStuff(object):
         return get_T_from_R_p(p, R)
 
     def get_src_tool_T(self):
-        p = np.random.unform(3)
+        p = np.random.uniform(size=(1,3))
+        print "THIS P ", p
         R = np.array([
             [0,  -1, 0],
             [1, 0, 0],
             [0,  0, 1]
         ])
+
+        return get_T_from_R_p(p, R)
 
 
 
@@ -221,6 +224,7 @@ class ToolSubstitution(object):
 
         T_align = get_T_from_R_p(np.zeros((1,3)), self.sub_tool.get_axis())
         T_inv   = get_T_from_R_p(np.zeros((1,3)), np.linalg.inv(self.src_tool.get_axis()))
+
         self.Ts.append(T_align) # To account fot alignment of sub tool along bb axis.
         self.Ts.append(T_inv) # To account for alignment of src tool along bb axis.
 
@@ -272,6 +276,8 @@ class ToolSubstitution(object):
             print "Final fitness: ", result_icp.fitness
             results.append(result_icp)
 
+            if result_icp.fitness == 1.0: break
+
         best_icp = max(results, key=lambda i:i.fitness)
 
         icp_fit = best_icp.fitness
@@ -287,7 +293,7 @@ class ToolSubstitution(object):
 
         return trans, fit, source, substitute
 
-    def get_sub_contact_point_icp(self, n_iter=2):
+    def get_R_cp(self, n_iter=2):
 
         # Apply initial icp alignment
         init_trans, init_fit, source, substitute = self.icp_alignment(n_iter)
@@ -360,15 +366,17 @@ class ToolSubstitution(object):
 
         sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
 
-        o3d.visualization.draw_geometries(trans_pcds, "Aligned")
+        if self.visualize:
+            o3d.visualization.draw_geometries(trans_pcds, "Aligned")
+            # o3d.visualization.draw_geometries([self.src_pcd,
+            #                                    self.sub_pcd.transform(final_trans)])
+
         final_trans = np.linalg.multi_dot(self.Ts)
-        # o3d.visualization.draw_geometries([self.src_pcd,
-        #                                    self.sub_pcd.transform(final_trans)])
 
-        return sub_contact_pnt, final_trans
+        return final_trans, sub_contact_pnt
 
 
-    def calc_sub_tool_aruco(self, R):
+    def calc_Tsourcetool_substitutetool(self, R, cp):
         aruco = ArucoStuff(self.sub_tool)
         # First, Get the initial pose of the sub tool
         T_aruco_sub = aruco.get_aruco_intial_T()
@@ -377,23 +385,29 @@ class ToolSubstitution(object):
         # Get pose of actual tool via perception.
         T_world_aruco_sub = aruco.percieve_aruco_T()
 
-        Ps_pnts_sub = self.sub_tool.get_unnormalized_pc()
+        # cp_sub = self.sub_tool.get_unnormalized_pc()
+        cp_sub = cp.reshape(1,-1)
         # Calculate location of points in world frame by aligning model with percpetion.
-        Ps_pnts_world = get_pnts_world_frame(T_world_aruco_sub,
+        cp_world = get_pnts_world_frame(T_world_aruco_sub,
                                              T_aruco_sub,
-                                             Ps_pnts_sub)
+                                             cp_sub).reshape(1,-1)
 
 
         T_world_aruco_sub_rot = get_aruco_world_frame(T_aruco_sub,
-                                                      Ps_pnts_sub,
-                                                      Ps_pnts_world,
-                                                      R)
+                                                      cp_sub,
+                                                      cp_world,
+                                                      R[0:3, 0:3])
+
+        # Equiv to: T_src_world * Tworld_sub == Tsrc_sub
+        return np.matmul(T_aruco_src.T, T_world_aruco_sub_rot)
+
     def main(self):
         # TODO: Make sure contact point can be transformed properly and recovered
         # self._align_action_parts()
         # cntct_pnt, R  = self._calc_sub_contact_pnt()
         # self.get_contact_pnt()
-        self.get_sub_contact_point_icp(n_iter=8)
+        R, cp = self.get_R_cp(n_iter=8)
+        print self.calc_Tsourcetool_substitutetool(R, cp)
         # self.get_random_contact_pnt()
         # c_point, R = self._find_best_segment()
 
