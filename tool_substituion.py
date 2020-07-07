@@ -5,7 +5,7 @@ from numpy.linalg import norm
 from itertools import permutations
 
 import open3d as o3d
-
+from scipy.spatial.distance import cdist
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D, art3d
@@ -89,8 +89,43 @@ class ToolSubstitution(object):
 
         self.voxel_size = voxel_size
         self.correspondence_thresh = voxel_size * .7
+        self.mahalanobis_thresh = 1.
+
         self.visualize = visualize
         self.Ts =[]
+
+
+    def _icp_wrapper(self, src,sub, src_fpfh, sub_fpfh, n_iter=5):
+        checker = [
+            o3d.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+            o3d.registration.CorrespondenceCheckerBasedOnDistance(self.correspondence_thresh),
+            o3d.registration.CorrespondenceCheckerBasedOnNormal(np.pi/2)
+                   ]
+
+
+        RANSAC = o3d.registration.registration_ransac_based_on_feature_matching
+
+        est_ptp = o3d.registration.TransformationEstimationPointToPoint()
+        est_ptpln = o3d.registration.TransformationEstimationPointToPlane()
+
+        criteria = o3d.registration.RANSACConvergenceCriteria(max_iteration=400000,
+                                                              max_validation=1000)
+
+        results = []
+
+        # Apply icp n_iter times and get best result
+        for i in range(n_iter):
+            result = RANSAC(src, sub, src_fpfh, sub_fpfh,
+                            max_correspondence_distance=self.correspondence_thresh,
+                            estimation_method=est_ptp,
+                            ransac_n=4,
+                            checkers=checker,
+                            criteria=criteria)
+
+            results.append(result)
+            if result.fitness == 1.0: break # 1.0 is best possible score.
+
+        return  max(results, key=lambda i:i.fitness)
 
     @staticmethod
     def _tpc_to_o3d(tpc):
@@ -140,6 +175,26 @@ class ToolSubstitution(object):
 
         print "rotation {} is best".format(i + 1)
         return Rs[i], aligned_pnts[i], scores[i]
+
+    def _get_contact_surface(self, src_cps, sub_pnts):
+
+        if len(src_cps.shape) > 1:
+            cov = np.cov(src_cps.T)
+            cp_mean = src_cps.mean(axis=0)
+        else:
+            cov = np.cov(sub_pnts.T)
+            cp_mean = src_cps
+
+
+        diffs = np.apply_along_axis(lambda row: np.linalg.norm(cp_mean - row),
+                                    axis=1, arr=sub_pnts)
+        sub_cp_idx = np.argmin(diffs).item()
+        mdist = cdist(sub_pnts, [sub_pnts[sub_cp_idx, :]], metric='mahalanobis', V=cov)[:,0]
+
+
+        return mdist < self.mahalanobis_thresh
+
+
 
 
     def _get_closest_pnt(self, pnt, pntcloud):
@@ -233,6 +288,9 @@ class ToolSubstitution(object):
 
 
     def icp_alignment(self, n_iter=10):
+        """
+        Algin sub tool to src tool using ICP.
+        """
         # Scale points to be ~1 meter so that self.voxel_size can
         # be consistent for all pointclouds.
         self._scale_pcs()
@@ -241,47 +299,19 @@ class ToolSubstitution(object):
         init_R, sub_pnts, align_fit = self._align_pnts()
         T_init = get_T_from_R_p(np.zeros(3).reshape(1,-1), init_R)
 
-        distance_threshold = self.voxel_size * 2
-
         src_pnts = self.scaled_src_pc.pnts
 
         source, substitute, source_down, substitute_down, source_fpfh, substitute_fpfh = \
             prepare_dataset(src_pnts, sub_pnts, self.voxel_size)
 
-        checker = [
-            o3d.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
-            o3d.registration.CorrespondenceCheckerBasedOnDistance(self.correspondence_thresh),
-            o3d.registration.CorrespondenceCheckerBasedOnNormal(np.pi/2)
-                   ]
+        # Apply icp n_iter times and get best result
+        best_icp = self._icp_wrapper(source_down, substitute_down,
+                                     source_fpfh, substitute_fpfh,
+                                     n_iter)
 
 
-        RANSAC = o3d.registration.registration_ransac_based_on_feature_matching
-
-        est_ptp = o3d.registration.TransformationEstimationPointToPoint()
-        est_ptpln = o3d.registration.TransformationEstimationPointToPlane()
-
-        criteria = o3d.registration.RANSACConvergenceCriteria(max_iteration=400000,
-                                                              max_validation=1000)
-
-        results = []
-        for i in range(n_iter):
-            result_icp = RANSAC(source_down, substitute_down, source_fpfh, substitute_fpfh,
-                                max_correspondence_distance=self.correspondence_thresh,
-                                estimation_method=est_ptp,
-                                ransac_n=4,
-                                checkers=checker,
-                                criteria=criteria
-            )
-
-            print "Final fitness: ", result_icp.fitness
-            results.append(result_icp)
-
-            if result_icp.fitness == 1.0: break
-
-        best_icp = max(results, key=lambda i:i.fitness)
-
-        icp_fit = best_icp.fitness
-        icp_trans = best_icp.transformation
+        icp_fit = best_icp.fitness # Fit score (between [0.0,1.0])
+        icp_trans = best_icp.transformation # T matrix
 
         if align_fit < icp_fit:
             trans = icp_trans
@@ -293,7 +323,10 @@ class ToolSubstitution(object):
 
         return trans, fit, source, substitute
 
-    def get_R_cp(self, n_iter=2):
+    def get_T_cp(self, n_iter=10):
+        """
+        Refine Initial ICP alignment and return final T rotation matrix and sub contact pnts.
+        """
 
         # Apply initial icp alignment
         init_trans, init_fit, source, substitute = self.icp_alignment(n_iter)
@@ -315,7 +348,7 @@ class ToolSubstitution(object):
 
                 if target_id == source_id + 1:
                     accum_pose = np.matmul(init_trans, accum_pose)
- 
+
                 pose_graph.nodes.append(o3d.registration.PoseGraphNode(np.linalg.inv(accum_pose)))
 
                 pose_graph.edges.append(o3d.registration.PoseGraphEdge(source_id,
@@ -336,7 +369,7 @@ class ToolSubstitution(object):
                                             option=option)
 
         trans_pcds = [pcd for pcd in pcds] # deep copy
-        fitnesses  = []
+        fitnesses  = [] #Store fitnes score to determine whether to use transformations.
         # Apply calculated transformations to pcds
         for pcd_id in range(n_pcds):
             trans = pose_graph.nodes[pcd_id].pose
@@ -357,56 +390,58 @@ class ToolSubstitution(object):
             aligned_sub = np.asarray(pcds[1].points)
             trans = init_trans
 
-        # Get sub contact point with transformed sub pc.
-        aligned_src = np.asarray(trans_pcds[1].points)
+        aligned_src = np.asarray(trans_pcds[0].points)
+        visualize_two_pcs(aligned_sub, aligned_src)
         src_contact_pnt = aligned_src[self.src_tool.contact_pnt_idx, :]
+        src_contact_pnt = src_contact_pnt.reshape(1,-1) \ # Reshape point for easy computation
+            if len(src_contact_pnt.shape) == 1 else src_contact_pnt
 
-        sub_contact_pnt_idx = self._get_closest_pnt(src_contact_pnt,
+        # Estimate contact surface on the sub tool
+        sub_contact_pnt_idx = self._get_contact_surface(src_contact_pnt,
                                                     aligned_sub)
 
-        sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
+        # sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
+        sub_contact_pnt = np.asarray(trans_pcds[1].points)[sub_contact_pnt_idx,:]
+
+        # Rerun icp on the src contact surface and sub contact surface for final alignment
+        _,_, source_down, substitute_down, source_fpfh, substitute_fpfh = \
+            prepare_dataset(src_contact_pnt, sub_contact_pnt, self.voxel_size)
+
+        T_translate = self._icp_wrapper(source_down, substitute_down, source_fpfh, substitute_fpfh).transformation
+        # T_translate = get_T_from_R_p(p=translate.reshape(1,-1))
+
+        trans_pcds[1].transform(T_translate) # apply translation
+        self.Ts.append(T_translate) # Store final translation
+
+        print "NUM SUB SURFACE pnts ", sub_contact_pnt.shape[0]
+
+        visualize_two_pcs(aligned_sub, aligned_sub[sub_contact_pnt_idx, :])
+        final_trans = np.linalg.multi_dot(self.Ts) # Combine all transformation into one to return
 
         if self.visualize:
             o3d.visualization.draw_geometries(trans_pcds, "Aligned")
             # o3d.visualization.draw_geometries([self.src_pcd,
             #                                    self.sub_pcd.transform(final_trans)])
 
-        final_trans = np.linalg.multi_dot(self.Ts)
 
-        return final_trans, sub_contact_pnt
-
-
-    def calc_Tsourcetool_substitutetool(self, R, cp):
-        aruco = ArucoStuff(self.sub_tool)
-        # First, Get the initial pose of the sub tool
-        T_aruco_sub = aruco.get_aruco_intial_T()
-        # Get the desired use pose of src tool
-        T_aruco_src = aruco.get_src_tool_T()
-        # Get pose of actual tool via perception.
-        T_world_aruco_sub = aruco.percieve_aruco_T()
-
-        # cp_sub = self.sub_tool.get_unnormalized_pc()
-        cp_sub = cp.reshape(1,-1)
-        # Calculate location of points in world frame by aligning model with percpetion.
-        cp_world = get_pnts_world_frame(T_world_aruco_sub,
-                                             T_aruco_sub,
-                                             cp_sub).reshape(1,-1)
+        # Retrun final T and contact surface on original sub tool model
+        return final_trans, self.sub_tool.get_pnt(sub_contact_pnt_idx)
 
 
-        T_world_aruco_sub_rot = get_aruco_world_frame(T_aruco_sub,
-                                                      cp_sub,
-                                                      cp_world,
-                                                      R[0:3, 0:3])
+    def calc_Tsourcetool_substitutetool(self, Tsub_subaruco, Tworld_sub, Tworld_srcaruco):
+        """
+        Calculates Tsrcaruco_subaruco, the frame of sub tools aruco in src aruco's frame
+        """
+        Tworld_subaruco = np.matmul(Tworld_sub, Tsub_subaruco )
 
-        # Equiv to: T_src_world * Tworld_sub == Tsrc_sub
-        return np.matmul(T_aruco_src.T, T_world_aruco_sub_rot)
+        return np.matmul(np.linalg.inv(Tworld_subaruco), Tworld_subaruco )
 
     def main(self):
         # TODO: Make sure contact point can be transformed properly and recovered
         # self._align_action_parts()
         # cntct_pnt, R  = self._calc_sub_contact_pnt()
         # self.get_contact_pnt()
-        R, cp = self.get_R_cp(n_iter=8)
+        R, cp = self.get_T_cp(n_iter=8)
         print self.calc_Tsourcetool_substitutetool(R, cp)
         # self.get_random_contact_pnt()
         # c_point, R = self._find_best_segment()
@@ -451,7 +486,7 @@ if __name__ == '__main__':
 
     print("SRC TOOL")
     # src.visualize()
-    # visualize(src.pnts, src.get_pnt(cntct_pnt), src.segments)
+    visualize(src.pnts, src.get_pnt(cntct_pnt), src.segments)
     print("SUB TOOL")
     # sub.visualize_bb()
     # sub_seg = [1 if sub.pnts[i,0] > -0.024 else 0 for i in range(sub.pnts.shape[0])]
@@ -459,5 +494,5 @@ if __name__ == '__main__':
     # visualize(sub.pnts, sub.get_pnt(cntct_pnt2), segments=sub.segments)
     # sub = ToolPointCloud(np.vstack([pnts2.T, sub_seg]).T)
 
-    ts = ToolSubstitution(src, sub, voxel_size=0.02, visualize=False)
+    ts = ToolSubstitution(src, sub, voxel_size=0.02, visualize=True)
     ts.main()
