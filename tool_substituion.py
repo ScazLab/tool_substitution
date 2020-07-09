@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import numpy as np
 from numpy import cross
 from numpy.linalg import norm
