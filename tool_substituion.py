@@ -51,7 +51,6 @@ class ArucoStuff(object):
 
     def get_src_tool_T(self):
         p = np.random.uniform(size=(1,3))
-        print "THIS P ", p
         R = np.array([
             [0,  -1, 0],
             [1, 0, 0],
@@ -394,7 +393,8 @@ class ToolSubstitution(object):
         aligned_src = np.asarray(trans_pcds[0].points)
         visualize_two_pcs(aligned_sub, aligned_src)
         src_contact_pnt = aligned_src[self.src_tool.contact_pnt_idx, :]
-        src_contact_pnt = src_contact_pnt.reshape(1,-1) \ # Reshape point for easy computation
+        # Reshape point for easy computation
+        src_contact_pnt = src_contact_pnt.reshape(1,-1) \
             if len(src_contact_pnt.shape) == 1 else src_contact_pnt
 
         # Estimate contact surface on the sub tool

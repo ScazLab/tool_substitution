@@ -143,7 +143,7 @@ class Mesh2Pointcloud(object):
                 return results.astype(np.float32)
         else:
             pnts = self.mesh._mesh.sample_points_uniformly(self.n)
-            return np.asarray(pnts)
+            return np.asarray(pnts.points)
 
 
 class GeneratePointcloud(object):
