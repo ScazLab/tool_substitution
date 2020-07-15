@@ -169,6 +169,8 @@ class ToolSubstitution(object):
         """
 
         if len(src_cps.shape) > 1: # If there are multiple contact points
+            print "src cps:"
+            print src_cps.T
             cov = np.cov(src_cps.T) # Then get the mean and cov from these points
             cp_mean = src_cps.mean(axis=0)
         else: # If only one contact point...
@@ -409,7 +411,8 @@ class ToolSubstitution(object):
         _,_, source_down, substitute_down, source_fpfh, substitute_fpfh = \
             prepare_dataset(src_contact_pnt, sub_contact_pnt, self.voxel_size)
 
-        T_translate = self._icp_wrapper(source_down, substitute_down, source_fpfh, substitute_fpfh).transformation
+        T_translate = self._icp_wrapper(source_down, substitute_down, 
+                                        source_fpfh, substitute_fpfh, n_iter=10).transformation
         # T_translate = get_T_from_R_p(p=translate.reshape(1,-1))
 
         trans_pcds[1].transform(T_translate) # apply translation
@@ -441,10 +444,11 @@ if __name__ == '__main__':
     n = 10000
     get_color = True
 
-   # pnts1 = gp.get_random_ply(n, get_color)
-   # pnts2 = gp.get_random_ply(n, get_color)
-    pnts1 = np.random.uniform(0, 1, size=(n, 3))
-    pnts2 = np.random.uniform(1.4, 2, size=(n, 3))
+    pnts1 = gp.get_random_pointcloud(n)
+    pnts2 = gp.get_random_pointcloud(n)
+    print pnts1
+   #pnts1 = np.random.uniform(0, 1, size=(n, 3))
+   #pnts2 = np.random.uniform(1.4, 2, size=(n, 3))
 
     # pnts2 = gp.mesh_to_pointcloud("./tool_files/point_clouds/a_knifekitchen2.ply", n)
     # pnts2 = gp.mesh_to_pointcloud("a_knifekitchen3/2/a_knifekitchen3_out_8_60_fused.ply", n)
@@ -459,7 +463,6 @@ if __name__ == '__main__':
     # pnts1 = gp.mesh_to_pointcloud('screwdriver_right/2/screwdriver_right_out_2_20_fused.ply',n , get_color)
     # pnts2 = gp.mesh_to_pointcloud('clamp_right/2/clamp_right_out_3_10_fused.ply', n, get_color)
 
-    "./tool_files/data_demo_segmented_numbered/rake_remove_box/2/rake_remove_box_out_2_40_fused.ply"
     src = ToolPointCloud(pnts1, contact_pnt_idx=None)
 
     # src.visualize_bb()
