@@ -17,6 +17,7 @@ from plyfile import PlyData, PlyElement
 from util import visualize_two_pcs
 
 PLY_DIR_PATH = "./tool_files/data_demo_segmented_numbered/"
+TOOL_DIR     = "../../tool_files/"
 
 
 class Mesh(object):
@@ -41,7 +42,8 @@ class Mesh(object):
                 self.from_mesh = True
             except ValueError:
                 pcd = o3d.io.read_point_cloud(fn)
-                self._mesh,_ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd)
+                pcd.estimate_normals()
+                self._mesh,_ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=9)
                 print "CREATED MESH"
                 self.is_pcd = True
 
@@ -175,6 +177,19 @@ class GeneratePointcloud(object):
 
         return self.m2p(n, mesh).get_pointcloud(get_color)
 
+    def get_random_pointcloud(self, n):
+
+        for path, subdirs, files in os.walk(TOOL_DIR):
+            name = random.choice(files)
+            print "NAME: ", name
+            if ".ply" in name or ".pcd" in name or '.stl' in name:
+                path = os.path.join(path, name)
+                print("LOADING {}\n".format(path))
+
+                return self.mesh_to_pointcloud(path, n, get_color=False)
+
+
+
     def get_random_ply(self, n, get_color=False):
         segments = 10
         k = ""
@@ -264,7 +279,7 @@ class GeneratePointcloud(object):
 if __name__ == '__main__':
     # guitar_mesh = mesh.Mesh.from_file('./tool_files/guitar.stl')
     # tools_mesh = mesh.Mesh.from_file('./tool_files/tools.stl')
-    tools_mesh = Mesh('./tool_files/tools.stl')
+    #tools_mesh = Mesh('./tool_files/tools.stl')
     # print(tools_mesh.v1)
     # mesh = gen_mesh_cube()
     # plot_mesh(mesh)
