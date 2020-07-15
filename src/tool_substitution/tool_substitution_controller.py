@@ -162,8 +162,9 @@ class ToolSubstitution(object):
 
     def _get_contact_surface(self, src_cps, sub_pnts, src_pnts):
         """
-        @src_cps: (nx3) ndarray contact surface of src tool.
-        @sub_pnts: (mx3) ndarray points in sub tool pc. 
+        @src_cps: (nk3) ndarray contact surface of src tool (subset of src_pnts).
+        @sub_pnts: (mx3) ndarray points in sub tool pc.
+        @src_pnts: (nx3) ndarray points of src tool.
 
         Returns idx of pnts in sub_pnts estimated to be its contact surface.
         """
@@ -179,7 +180,7 @@ class ToolSubstitution(object):
             _, i = tree.query(src_cps, k=20)
             est_src_surface = src_pnts[i, :]
 
-            cov = np.cov(est_src_surface.T) 
+            cov = np.cov(est_src_surface.T)
             cp_mean = src_cps
 
 
