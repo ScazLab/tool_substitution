@@ -178,15 +178,17 @@ class GeneratePointcloud(object):
         return self.m2p(n, mesh).get_pointcloud(get_color)
 
     def get_random_pointcloud(self, n):
-
+        paths = []
         for path, subdirs, files in os.walk(TOOL_DIR):
             name = random.choice(files)
             print "NAME: ", name
             if ".ply" in name or ".pcd" in name or '.stl' in name:
                 path = os.path.join(path, name)
-                print("LOADING {}\n".format(path))
+                paths.append(path)
 
-                return self.mesh_to_pointcloud(path, n, get_color=False)
+        path = random.choice(paths)
+        print("LOADING {}\n".format(path))
+        return self.mesh_to_pointcloud(path, n, get_color=False)
 
 
 
