@@ -333,7 +333,7 @@ class ToolSubstitution(object):
         # Even if ICP_results are a bit worse than initial alignment,
         # Upon visual inspection the results are often better, so we don't
         # want to prematurely discard them.
-        if fit_ratio > .self.fit_ratio_thresh:
+        if fit_ratio > self.fit_ratio_thresh:
             print "USING ICP RESULTS"
             trans = icp_trans
             fit   = icp_fit
@@ -448,7 +448,7 @@ class ToolSubstitution(object):
         visualize_two_pcs(aligned_sub, sub_contact_pnt)
         final_trans = np.linalg.multi_dot(self.Ts) # Combine all transformation into one to return
 
-       if self.visualize:
+        if self.visualize:
             o3d.visualization.draw_geometries(trans_pcds, "Aligned")
             # o3d.visualization.draw_geometries([self.src_pcd,
             #                                    self.sub_pcd.transform(final_trans)])
