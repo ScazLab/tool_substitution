@@ -317,8 +317,8 @@ def visualize_two_pcs(pnts1, pnts2, s1=None, s2=None, c1=None, c2=None):
         ax.scatter(xs=c2[ 0], ys=c2[ 1], zs=c2[ 2], c='y', s=350)
 
     ax.axis('equal')
-    ax.scatter(xs=pnts1[:, 0], ys=pnts1[:, 1], zs=pnts1[:, 2], c='r')
-    ax.scatter(xs=pnts2[:, 0], ys=pnts2[:, 1], zs=pnts2[:, 2], c='b')
+    ax.scatter(xs=pnts1[:, 0], ys=pnts1[:, 1], zs=pnts1[:, 2], c='r', s=5)
+    ax.scatter(xs=pnts2[:, 0], ys=pnts2[:, 1], zs=pnts2[:, 2], c='b', s=10)
 
 
 

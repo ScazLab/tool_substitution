@@ -52,14 +52,12 @@ def prepare_dataset(pnts1, pnts2, voxel_size):
 
     trans_init = np.asarray([[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0],
                              [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
-    # trans_init = np.identity(4)
-    source.transform(trans_init)
+    trans_init = np.identity(4)
+    # source.transform(trans_init)
     # draw_registration_result(source, target, np.identity(4))
 
     source_down, source_fpfh = preprocess_point_cloud(source, voxel_size)
-                                                      # "./tool_files/rake_norm.ply")
     target_down, target_fpfh = preprocess_point_cloud(target, voxel_size)
-                                                      # "./tool_files/test_pointcloud_norm.ply")
     return source, target, source_down, target_down, source_fpfh, target_fpfh
 
 

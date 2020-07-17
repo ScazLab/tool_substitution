@@ -5,13 +5,14 @@ from numpy.linalg import norm
 
 from itertools import permutations
 
-import open3d as o3d
 from scipy.spatial.distance import cdist
 from scipy.spatial import cKDTree, KDTree
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D, art3d
 from matplotlib.patches import Rectangle
+
+import open3d as o3d
 
 from tool_pointcloud import ToolPointCloud
 from sample_pointcloud import GeneratePointcloud
@@ -47,6 +48,9 @@ def visualize(pnts, cp=None, segments=None):
 
 
 class ToolSubstitution(object):
+    """
+    Class for aligning a substitute tool pointcloud to a source tool pointcloud.
+    """
     def __init__(self, src_tool_pc, sub_tool_pc, voxel_size=0.02, visualize=False):
         """
         Class for aligning substitute tool to source tool based on a given contact surface
@@ -56,13 +60,16 @@ class ToolSubstitution(object):
         self.src_tool = src_tool_pc
         self.sub_tool = sub_tool_pc
 
-        # Open3d pointcloud of src and sub tool.   
+        # Open3d pointcloud of src and sub tool.
         self.src_pcd = self._tpc_to_o3d(self.src_tool)
         self.sub_pcd = self._tpc_to_o3d(self.sub_tool)
         # Params for ICP
-        self.voxel_size = voxel_size 
-        self.correspondence_thresh = voxel_size * .7
-        # 
+        self.voxel_size = voxel_size
+        self.correspondence_thresh = voxel_size * 2
+        # Acceptable amount of alignment loss after applying ICP.
+        # Often the quantitatively alignment will drop, but qualitatively it gets better.
+        self.fit_ratio_thresh = .75
+        # See https://en.wikipedia.org/wiki/Mahalanobis_distance
         self.mahalanobis_thresh = 1.
 
         self.visualize = visualize
@@ -92,7 +99,7 @@ class ToolSubstitution(object):
 
         # Apply icp n_iter times and get best result
         for i in range(n_iter):
-            result = RANSAC(src, sub, src_fpfh, sub_fpfh,
+            result = RANSAC(sub, src, sub_fpfh, src_fpfh,
                             max_correspondence_distance=self.correspondence_thresh,
                             estimation_method=est_ptp,
                             ransac_n=4,
@@ -130,7 +137,7 @@ class ToolSubstitution(object):
         @sub_pnts: (mx3) ndarray of points of sub tool.
         @Rs:       list of (3x3) ndarray rotations.
         Returns (R, (nx3) array of rotated points, score) representing
-        The rotation of sub_pnts that best aligns with src_pnts. 
+        The rotation of sub_pnts that best aligns with src_pnts.
         """
         if not Rs:
             Rs.append(np.identity(3))
@@ -145,9 +152,10 @@ class ToolSubstitution(object):
             sub_o3d.points = o3d.utility.Vector3dVector(sub_pnts_rot)
             src_o3d.points = o3d.utility.Vector3dVector(src_pnts)
             # How well do the points align?
-            dist = o3d.registration.evaluate_registration(src_o3d, sub_o3d,
+            # dist = o3d.registration.evaluate_registration(src_o3d, sub_o3d,
+            #                                               self.correspondence_thresh)
+            dist = o3d.registration.evaluate_registration(sub_o3d,src_o3d,
                                                           self.correspondence_thresh)
-            # score = np.asarray(dist).mean()
             score = dist.fitness
 
             print "ALIGNMENT SCORE: ", score
@@ -220,6 +228,7 @@ class ToolSubstitution(object):
         _, scale_f = self.scaled_sub_pc.scale_pnts_to_target(self.scaled_src_pc)
         for p in permutations([0,1,2]):
             permed_scale_f = scale_f[list(p)]
+            print permed_scale_f
             scaled_sub_pnts = self.scaled_sub_pc.pnts * permed_scale_f
 
 
@@ -229,7 +238,8 @@ class ToolSubstitution(object):
 
             scores.append((R, rot_sub_pnts, score))
 
-        return max(scores, key=lambda s: s[2])
+        score =  max(scores, key=lambda s: s[2])
+        return score
 
 
 
@@ -268,7 +278,7 @@ class ToolSubstitution(object):
         self.centered_src_pc = self._center_and_align_pnts(self.src_tool)
         self.centered_sub_pc = self._center_and_align_pnts(self.sub_tool)
 
-        # Get the lengths of the bounding box sides for each pc  
+        # Get the lengths of the bounding box sides for each pc
         src_norm = self.centered_src_pc.bb.norms[0]
         sub_norm = self.centered_sub_pc.bb.norms[0]
 
@@ -278,7 +288,7 @@ class ToolSubstitution(object):
         scaled_src_pnts = self.centered_src_pc.pnts *  1.0 / largest_span
         scaled_sub_pnts = self.centered_sub_pc.pnts *  1.0 / largest_span
 
-        # Sub tool AND src tool have been transformed, so make sure to account for both   
+        # Sub tool AND src tool have been transformed, so make sure to account for both
         # for final sub rotation.
         T_align = get_T_from_R_p(np.zeros((1,3)), self.sub_tool.get_axis())
         T_inv   = get_T_from_R_p(np.zeros((1,3)), np.linalg.inv(self.src_tool.get_axis()))
@@ -315,11 +325,20 @@ class ToolSubstitution(object):
 
         icp_fit = best_icp.fitness # Fit score (between [0.0,1.0])
         icp_trans = best_icp.transformation # T matrix
+        fit_ratio = icp_fit / align_fit
 
-        if align_fit < icp_fit:
+        print "INITAL ALIGNMENT FITNESS: ", align_fit
+        print "INITAL ICP FITNESS: ", icp_fit
+        print "FIT RATIO: ", fit_ratio
+        # Even if ICP_results are a bit worse than initial alignment,
+        # Upon visual inspection the results are often better, so we don't
+        # want to prematurely discard them.
+        if fit_ratio > .self.fit_ratio_thresh:
+            print "USING ICP RESULTS"
             trans = icp_trans
             fit   = icp_fit
         else:
+            print "DISCARDING ICP RESULTS"
             trans = T_init
             fit   = align_fit
             self.Ts.append(T_init)
@@ -334,16 +353,18 @@ class ToolSubstitution(object):
         # Apply initial icp alignment
         init_trans, init_fit, source, substitute = self.icp_alignment(n_iter)
 
+
         pose_graph = o3d.registration.PoseGraph()
         accum_pose = np.identity(4)
         pose_graph.nodes.append(o3d.registration.PoseGraphNode(accum_pose))
 
-        pcds = [source, substitute]
+        pcds = [substitute, source]
+        src_idx, sub_idx = (1, 0)
         n_pcds = len(pcds)
         for source_id in range(n_pcds):
             for target_id in range(source_id + 1, n_pcds):
-                src = pcds[source_id]
-                sub = pcds[target_id]
+                sub = pcds[source_id]
+                src = pcds[target_id]
 
                 GTG_mat = o3d.registration.get_information_matrix_from_point_clouds(sub, src,
                                                                                     self.voxel_size,
@@ -378,22 +399,23 @@ class ToolSubstitution(object):
             trans = pose_graph.nodes[pcd_id].pose
             print trans
             trans_pcds[pcd_id].transform(trans)
-            fit = o3d.registration.evaluate_registration(trans_pcds[0],
-                                                         trans_pcds[1],
+            fit = o3d.registration.evaluate_registration(trans_pcds[sub_idx],
+                                                         trans_pcds[src_idx],
                                                          self.correspondence_thresh).fitness
             fitnesses.append(fit)
 
         # If these new transformations lower fit score, dont apply them.
-        if fitnesses[1] > init_fit:
-            aligned_sub = np.asarray(trans_pcds[1].points)
-            trans = pose_graph.nodes[1].pose
+        print fitnesses
+        if fitnesses[sub_idx] > init_fit:
+            aligned_sub = np.asarray(trans_pcds[sub_idx].points)
+            trans = pose_graph.nodes[sub_idx].pose
             self.Ts.append(trans)
         else:
-            print "USING INITIAL ICP RESULTS"
-            aligned_sub = np.asarray(pcds[1].points)
+            print "USING INITIAL ICP RESULTS: "
+            aligned_sub = np.asarray(pcds[sub_idx].points)
             trans = init_trans
 
-        aligned_src = np.asarray(trans_pcds[0].points)
+        aligned_src = np.asarray(trans_pcds[src_idx].points)
         visualize_two_pcs(aligned_sub, aligned_src)
         src_contact_pnt = aligned_src[self.src_tool.contact_pnt_idx, :]
         # Reshape point for easy computation
@@ -406,26 +428,27 @@ class ToolSubstitution(object):
                                                     aligned_src)
 
         # sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
-        sub_contact_pnt = np.asarray(trans_pcds[1].points)[sub_contact_pnt_idx,:]
+        sub_contact_pnt = np.asarray(trans_pcds[sub_idx].points)[sub_contact_pnt_idx,:]
 
         # Rerun icp on the src contact surface and sub contact surface for final alignment
         _,_, source_down, substitute_down, source_fpfh, substitute_fpfh = \
             prepare_dataset(src_contact_pnt, sub_contact_pnt, self.voxel_size)
 
-        T_translate = self._icp_wrapper(source_down, substitute_down, 
-                                        source_fpfh, substitute_fpfh, n_iter=10).transformation
-        # T_translate = get_T_from_R_p(p=translate.reshape(1,-1))
+        if fitnesses[sub_idx] < .95: # If the pointclouds area already well aligned then further alignment unnecessary.
+            T_translate = self._icp_wrapper(source_down, substitute_down,
+                                            source_fpfh, substitute_fpfh, n_iter=10).transformation
+            # T_translate = get_T_from_R_p(p=translate.reshape(1,-1))
 
-        trans_pcds[1].transform(T_translate) # apply translation
-        self.Ts.append(T_translate) # Store final translation
+            trans_pcds[1].transform(T_translate) # apply translation
+            self.Ts.append(T_translate) # Store final translation
 
         print "NUM SUB SURFACE pnts ", sub_contact_pnt.shape[0]
 
-        visualize_two_pcs(aligned_sub, aligned_sub[sub_contact_pnt_idx, :])
+        # visualize_two_pcs(aligned_sub, aligned_sub[sub_contact_pnt_idx, :])
         visualize_two_pcs(aligned_sub, sub_contact_pnt)
         final_trans = np.linalg.multi_dot(self.Ts) # Combine all transformation into one to return
 
-        if self.visualize:
+       if self.visualize:
             o3d.visualization.draw_geometries(trans_pcds, "Aligned")
             # o3d.visualization.draw_geometries([self.src_pcd,
             #                                    self.sub_pcd.transform(final_trans)])
@@ -442,12 +465,15 @@ class ToolSubstitution(object):
 
 if __name__ == '__main__':
     gp = GeneratePointcloud()
-    n = 10000
+    n = 8000
     get_color = True
 
     pnts1 = gp.get_random_pointcloud(n)
     pnts2 = gp.get_random_pointcloud(n)
-    print pnts1
+    # pnts1 = gp.load_pointcloud("../../tool_files/rake.ply")
+    # pnts2 = gp.load_pointcloud("../../tool_files/rake.ply")
+    # pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/b_wildo_bowl.ply")
+    # pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_bowlchild.ply")
    #pnts1 = np.random.uniform(0, 1, size=(n, 3))
    #pnts2 = np.random.uniform(1.4, 2, size=(n, 3))
 
@@ -455,14 +481,8 @@ if __name__ == '__main__':
     # pnts2 = gp.mesh_to_pointcloud("a_knifekitchen3/2/a_knifekitchen3_out_8_60_fused.ply", n)
     # pnts2 = gp.load_pointcloud("./tool_files/point_clouds/a_bowlchild.ply", None)
     # pnts2 = gp.mesh_to_pointcloud("/rake_remove_box/2/rake_remove_box_out_2_40_fused.ply", n)
-    # pnts1 = gp.mesh_to_pointcloud('ranch/3/ranch_out_6_20_fused.ply',n,  get_color)
-    # pnts1 = gp.mesh_to_pointcloud('hammer/2/hammer_out_3_10_fused.ply',n , get_color)
-    # pnts1 = gp.mesh_to_pointcloud('chineseknife_1_3dwh/2/chineseknife_1_3dwh_out_4_60_fused.ply',n , get_color)
     # pnts1 = gp.load_pointcloud('./tool_files/point_clouds/a_bowl.ply', None)
     # pnts1 = gp.mesh_to_pointcloud('a_knifekitchen2/2/a_knifekitchen2_out_4_60_fused.ply',n , get_color)
-    # pnts1 = gp.mesh_to_pointcloud('clamp_left/2/clamp_left_out_2_10_fused.ply',n,  get_color)
-    # pnts1 = gp.mesh_to_pointcloud('screwdriver_right/2/screwdriver_right_out_2_20_fused.ply',n , get_color)
-    # pnts2 = gp.mesh_to_pointcloud('clamp_right/2/clamp_right_out_3_10_fused.ply', n, get_color)
 
     src = ToolPointCloud(pnts1, contact_pnt_idx=None)
 
@@ -488,5 +508,5 @@ if __name__ == '__main__':
     # visualize(sub.pnts, sub.get_pnt(cntct_pnt2), segments=sub.segments)
     # sub = ToolPointCloud(np.vstack([pnts2.T, sub_seg]).T)
 
-    ts = ToolSubstitution(src, sub, voxel_size=0.02, visualize=True)
+    ts = ToolSubstitution(src, sub, voxel_size=0.05, visualize=True)
     ts.main()
