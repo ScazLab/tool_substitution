@@ -16,8 +16,8 @@ def get_pnts_world_frame(T_aruco_world, T_aruco_model, Ps_pnts_model):
     # There should be no stretching, so the unit between the world frame and the model frame must be the consistent!
     T_model_rotation_in_world = np.matmul(T_aruco_world, np.linalg.inv(T_aruco_model))
 
-    print "T_model_rotation_in_world"
-    print T_model_rotation_in_world
+    #print "T_model_rotation_in_world"
+    #print T_model_rotation_in_world
 
     # should be in the format of [x, y, z, 1].T
     Ps_pnts_model = np.hstack([Ps_pnts_model, np.ones((Ps_pnts_model.shape[0], 1))]).T
@@ -48,8 +48,8 @@ def get_aruco_world_frame(T_aruco_model, Ps_pnts_model, Ps_pnts_world, R_pnts):
 
     T_pnts_rotation = np.matmul(T_pnts_final, np.linalg.inv(T_pnts_initial))
 
-    print "T_pnts_rotation"
-    print T_pnts_rotation
+    #print "T_pnts_rotation"
+    #print T_pnts_rotation
 
     T_aruco_rotation = T_pnts_rotation
 
@@ -64,6 +64,7 @@ def get_T_from_R_p(p, R = np.identity(3)):
 
     return T
 
+"""
 T_aruco_model = np.array([[0, 1, 0, 3],
                           [1, 0, 0, 2],
                           [0, 0, -1, 0],
@@ -118,3 +119,4 @@ print T_aruco_world_found
                            #[ 0.,  1.,  0.,  1.],
                            #[-1.,  0.,  0.,  4.],
                            #[ 0.,  0.,  0.,  1.]])
+"""
