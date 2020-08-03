@@ -275,6 +275,20 @@ def r_z(a):
 
 
 
+def visualize_contact_area(pnts, cntct_idx):
+    """Visualize a tool and it's contact area."""
+    tool_idx = [i for in range(pnts.shape[0]) if not i in cntct_idx]
+    tool_pnts = pnts[tool_pnts]
+    cntct_pnts = pnts[cntct_idx]
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    ax.scatter(xs=tool_pnts[ 0], ys=tool_pnts[ 1], zs=tool_pnts[ 2], c='r')
+    ax.scatter(xs=cntct_pnts[ 0], ys=cntct_pnts[ 1], zs=cntct_pnts[ 2], c='b')
+
+    plt.show()
+
 
 def visualize_two_pcs(pnts1, pnts2, s1=None, s2=None, c1=None, c2=None):
     """

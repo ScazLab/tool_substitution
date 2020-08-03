@@ -19,7 +19,7 @@ from sample_pointcloud import GeneratePointcloud
 from util import (min_point_distance, rotation_matrix_from_vectors,
                   weighted_min_point_distance, visualize_two_pcs,
                   rotation_matrix_from_box_rots, visualize_vectors,
-                  r_x, r_y, r_z)
+                  r_x, r_y, r_z, visualize_contact_area)
 
 from scipy.spatial.transform import Rotation as Rot
 
@@ -445,7 +445,8 @@ class ToolSubstitution(object):
         print "NUM SUB SURFACE pnts ", sub_contact_pnt.shape[0]
 
         # visualize_two_pcs(aligned_sub, aligned_sub[sub_contact_pnt_idx, :])
-        visualize_two_pcs(aligned_sub, sub_contact_pnt)
+        visualize_contact_area(aligned_sub, sub_contact_pnt_idx)
+        visualize_contact_area(self.src_tool.pnts, src_contact_pnt)
         final_trans = np.linalg.multi_dot(self.Ts) # Combine all transformation into one to return
 
        if self.visualize:

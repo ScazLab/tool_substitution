@@ -17,7 +17,7 @@ from plyfile import PlyData, PlyElement
 from util import visualize_two_pcs
 
 PLY_DIR_PATH = "./tool_files/data_demo_segmented_numbered/"
-TOOL_DIR     = "../../tool_files/"
+TOOL_DIR     = "../../tool_files/point_clouds/"
 
 
 class Mesh(object):
@@ -32,6 +32,7 @@ class Mesh(object):
         if ".ply" in fn:
             try:
                 try:
+                    print "READING IN PLY"
                     self._mesh = PlyData.read(fn)
                 except:
                     self._mesh = PlyData.read("{}{}".format(PLY_DIR_PATH, fn))
@@ -41,9 +42,13 @@ class Mesh(object):
                 self._gen_segment_dict()
                 self.from_mesh = True
             except ValueError:
+                print "USING O3D PC"
                 pcd = o3d.io.read_point_cloud(fn)
-                pcd.estimate_normals()
-                self._mesh,_ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=9)
+                print "ESTIMATING NORMALS"
+                # pcd.estimate_normals()
+                print "CREATING MESH"
+                # self._mesh,_ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=9)
+                self._mesh = pcd
                 print "CREATED MESH"
                 self.is_pcd = True
 
@@ -144,7 +149,8 @@ class Mesh2Pointcloud(object):
             else:
                 return results.astype(np.float32)
         else:
-            pnts = self.mesh._mesh.sample_points_uniformly(self.n)
+            # pnts = self.mesh._mesh.sample_points_uniformly(self.n)
+            pnts = self.mesh._mesh
             return np.asarray(pnts.points)
 
 
