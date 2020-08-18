@@ -26,6 +26,7 @@ class ToolPointCloud(object):
             self.pnts = pnts
             self.segments = np.repeat(1, pnts.shape[0])
             self.segment_list = [1]
+        self.segment_offsets = self.gen_segment_offsets()
         self.eps = eps # Error term for deciding best bounding box
         self.mean = None
         self.bb = None # 10 by 3, the 5th and 10th is the reptead point
@@ -77,6 +78,20 @@ class ToolPointCloud(object):
 
         return scaled_pnts, scale_factor
 
+
+    def gen_segment_offsets(self):
+        offset = 0
+        offsets = {}
+
+        segs, seg_counts = np.unique(self.segments, return_counts=True)
+
+        for i in range(segs.shape[0]):
+            offsets[segs[i]] = offset
+            offset += seg_counts[i]
+
+        return offsets
+
+
     def get_segment_from_point(self, idx):
         """
         Returns the segment to which idx of point belongs.
@@ -96,6 +111,19 @@ class ToolPointCloud(object):
         return self.pnts[idx]
 
 
+    def get_action_segment(self):
+        """
+        Get the segment of the tool containing the most contact points.
+        """
+        print self.contact_pnt_idx
+        cp_segments = self.get_segment_from_point(self.contact_pnt_idx)
+        print "CP SEGMENTS ", cp_segments
+        segs, seg_counts = np.unique(cp_segments, return_counts=True)
+        print (segs, seg_counts)
+
+
+        return segs[np.argmax(seg_counts)]
+
     def get_pnt(self, i):
         return self.pnts[i, :]
 
@@ -109,22 +137,20 @@ class ToolPointCloud(object):
         point in the context of just the segment with which it belongs.
         """
         seg = self.get_segment_from_point(idx)
-        pnt = self.get_pnt(idx)
-        seg_pnts = self.get_pnts_in_segment(seg)
+        offsets = np.array([self.segment_offsets[s] for s in seg])
+        idx = np.asarray(idx)
+        print "idx ", idx
+        print "offsets ", offsets
 
-        idx = np.where((seg_pnts == pnt).all(axis=1))
-        print("IDX ", idx)
-        return idx[0][0]
+        return idx - offsets
 
     def segment_idx_to_idx(self, seg, seg_idx):
         """
         Given a point idx within a particular segment, get the idx
         of the same point in the context of entire pointcloud.
         """
-        seg_pnts = self.get_pnts_in_segment(seg)
-        seg_pnt = seg_pnts[seg_idx, :]
-
-        return np.where((self.pnts == seg_pnt).all(axis=1))[0][0]
+        offsets = [self.segment_offsets[s] for s in seg]
+        return seg_idx + offsets
 
     """
     The aruco_frame related functions are yet to be integrated with the rest of this class.
@@ -266,14 +292,25 @@ class ToolPointCloud(object):
     def get_pc_bb_axis_frame(self, axis_order=[0,1,2]):
         return np.matmul(np.linalg.inv(self.get_axis(axis_order)), self.pnts.T).T
 
+    def get_bb_centroid(self):
+        """
+        Return centroid of (1x3) np array, of bounding box.
+        """
+        bb_trimed = self.bb.bb.copy()
+        bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
+        bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
+
+        return np.mean(bb_trimed, axis=0)
+
+
     def get_pc_bb_axis_frame_centered(self, axis_order=[0,1,2]):
         pc_bb_axis_frame = self.get_pc_bb_axis_frame(axis_order)
         #print "pc_bb_axis_frame.shape: ", pc_bb_axis_frame.shape
         bb_trimed = self.bb.bb.copy()
         bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
         bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
-        #print "bb_trimed"
-        #print bb_trimed
+        print "bb_trimed"
+        print bb_trimed
         # convert the bbs to the right frame:
         bb_trimed_axis_frame = np.matmul(np.linalg.inv(self.get_axis(axis_order)),
                                          bb_trimed.T).T
