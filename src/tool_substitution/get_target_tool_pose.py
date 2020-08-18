@@ -57,12 +57,44 @@ def get_aruco_world_frame(T_aruco_model, Ps_pnts_model, Ps_pnts_world, R_pnts):
 
     return T_aruco_world
 
-def get_T_from_R_p(p, R = np.identity(3)):
+def get_T_from_R_p(p=np.zeros((1,3)), R = np.identity(3)):
     # p is 1 by 3
+
+    if not p.shape[0] == 1:
+        p = p.reshape(1,-1)
+
     T = np.hstack([R, p.T])
     T = np.vstack([T, np.array([0, 0, 0, 1])])
 
     return T
+
+def get_scaling_T(scale=np.ones((1,3)), center=np.zeros((1,3))):
+    """
+    @scale (1x3 ndarray) scale factor for scaling a point cloud.
+    @center (1x3 ndarray) center of scaling (this point will not be scaled.)
+
+    returns corresponding T matrix.
+    """
+
+    R = np.identity(3) * scale
+    p = (1 - scale) * center
+
+    return get_T_from_R_p(R=R, p=p)
+
+def T_inv(T):
+    """
+    Returns inverse of T.
+    """
+    R = T[0:3, 0:3]
+    p = T[0:3, -1].reshape(1,-1)
+    inv_R = np.linalg.inv(R)
+
+    T = np.hstack([inv_R, -inv_R.dot(p.T)])
+    T = np.vstack([T, np.array([0, 0, 0, 1])])
+
+    return T
+
+
 
 """
 T_aruco_model = np.array([[0, 1, 0, 3],
