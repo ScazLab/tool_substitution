@@ -11,6 +11,7 @@ from stl import mesh
 
 from matplotlib import pyplot as plt
 from mpl_toolkits import mplot3d
+from sklearn.cluster import KMeans
 
 from plyfile import PlyData, PlyElement
 
@@ -30,27 +31,7 @@ class Mesh(object):
         "docstring"
         self.is_pcd = False
         if ".ply" in fn:
-            try:
-                try:
-                    print "READING IN PLY"
-                    self._mesh = PlyData.read(fn)
-                except:
-                    self._mesh = PlyData.read("{}{}".format(PLY_DIR_PATH, fn))
-                self._f_type = self.PLY
-            # n x 3 array of vertex indices for each triangle.
-                self.vert_idx  = np.vstack(self._mesh['face'].data['vertex_indices'])
-                self._gen_segment_dict()
-                self.from_mesh = True
-            except ValueError:
-                print "USING O3D PC"
-                pcd = o3d.io.read_point_cloud(fn)
-                print "ESTIMATING NORMALS"
-                # pcd.estimate_normals()
-                print "CREATING MESH"
-                # self._mesh,_ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=9)
-                self._mesh = pcd
-                print "CREATED MESH"
-                self.is_pcd = True
+            self._mesh = o3d.io.read_point_cloud(fn)
 
 
         elif ".stl" in fn:
@@ -98,11 +79,13 @@ class Mesh(object):
 
            return colors
     def _gen_segment_dict(self):
-        segments = np.unique(self._mesh['vertex'][['red', 'green', 'blue']])
 
-        self.segment_dict = {}
-        for s in range(segments.shape[0]):
-            self.segment_dict[tuple(segments[s])] = s
+        if self._mesh.has_color:
+            segments = np.unique(np.asarray(self._mesh.colors))
+
+            self.segment_dict = {}
+            for s in range(segments.shape[0]):
+                self.segment_dict[tuple(segments[s])] = s
 
 
 class Mesh2Pointcloud(object):
@@ -159,21 +142,38 @@ class GeneratePointcloud(object):
         "docstring"
         self.m2p = Mesh2Pointcloud
 
-    def load_pointcloud(self, fn, n=None):
-         # if '.ply' in fn:
-         #     pnts = PlyData.read(fn)
-         #     pnts = self._mesh['vertex'][['x', 'y', 'z']]
-         #     pnts = np.array([list(p) for p in pnts])
+    def _get_pc_with_segments(self, pcd):
+        pnts = np.asarray(pcd.points)
+        segments = np.unique(np.asarray(pcd.colors))
+        segment_dict = {}
 
-         # elif '.pcd' in fn:
-        pnts = o3d.io.read_point_cloud(fn)
-        pnts = np.asarray(pnts.points)
+        for s in range(segments.shape[0]):
+            self.segment_dict[segments[s]] = s
 
-        if not n is None:
-            n  = n if n < pnts.shape[0] else pnts.shape[0]
-            idx = np.random.choice(n, pnts.shape[0])
+        segment_array = np.apply_along_axis(lambda c: segment_dict(c),
+                                            axis=1,
+                                            arr=np.asarray(pcd.colors))
 
-            pnts = pnts[idx, :]
+        return np.vstack([pnts.T, segment_array]).T
+
+    def _gen_segmented_pc(self, pcd):
+        print "Generating PC segments..."
+        pnts = np.asarray(pcd.points)
+        kmeans = KMeans(n_clusters=2).fit(pnts)
+
+        return np.vstack([pnts.T, kmeans.labels_]).T
+
+
+    def load_pointcloud(self, fn, n=None, get_segments=False):
+        print "Loading {}...".format(fn)
+        pcd = o3d.io.read_point_cloud(fn)
+        pnts = np.asarray(pcd.points)
+
+        if get_segments:
+            if pcd.has_colors():
+                pnts = self._get_pc_with_segments(pcd)
+            else:
+                pnts = self._gen_segmented_pc(pcd)
 
         return pnts
 
@@ -285,7 +285,9 @@ class GeneratePointcloud(object):
 
 
 if __name__ == '__main__':
-    # guitar_mesh = mesh.Mesh.from_file('./tool_files/guitar.stl')
+    gp = GeneratePointcloud()
+    
+    # guitar_mesh = mesh.Mesh.from_file('./tool_files/guitar.stl'
     # tools_mesh = mesh.Mesh.from_file('./tool_files/tools.stl')
     #tools_mesh = Mesh('./tool_files/tools.stl')
     # print(tools_mesh.v1)
@@ -297,7 +299,8 @@ if __name__ == '__main__':
     # test_sampling(5000, tools_mesh)
     # fn = "hammer/3/hammer_out_4_10_fused.ply"
     # mesh_to_pointcloud(100, fn)
-    rake1 = GeneratePointcloud().mesh_to_pointcloud(1000, './tool_files/rake.stl')
-    rake2 = GeneratePointcloud().get_rake_points(1000)
-    visualize_two_pcs(rake1, rake2)
+
+
+    # rake1 = GeneratePointcloud().mesh_to_pointcloud(1000, './tool_files/rake.stl')
+    # rake2 = GeneratePointcloud().get_rake_points(1000)
     
