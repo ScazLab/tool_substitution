@@ -285,7 +285,7 @@ def visualize_contact_area(pnts, cntct_idx):
     ax = fig.add_subplot(111, projection='3d')
 
     ax.scatter(xs=tool_pnts[:, 0], ys=tool_pnts[:, 1], zs=tool_pnts[:, 2], c='r')
-    ax.scatter(xs=cntct_pnts[:, 0], ys=cntct_pnts[:, 1], zs=cntct_pnts[:, 2], c='b')
+    ax.scatter(xs=cntct_pnts[:, 0], ys=cntct_pnts[:, 1], zs=cntct_pnts[:, 2], c='b', s=200)
 
     plt.show()
 

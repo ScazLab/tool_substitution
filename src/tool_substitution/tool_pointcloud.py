@@ -139,8 +139,8 @@ class ToolPointCloud(object):
         seg = self.get_segment_from_point(idx)
         offsets = np.array([self.segment_offsets[s] for s in seg])
         idx = np.asarray(idx)
-        print "idx ", idx
-        print "offsets ", offsets
+        # print "idx ", idx
+        # print "offsets ", offsets
 
         return idx - offsets
 

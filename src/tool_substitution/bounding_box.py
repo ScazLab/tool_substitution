@@ -193,7 +193,6 @@ class BoundingBox2D(BoundingBox):
 
         project_x_min, project_x_max = np.min(projection_x), np.max(projection_x)
         project_y_min, project_y_max = np.min(projection_y), np.max(projection_y)
-
         projected_boundary = np.array([[project_x_min, project_y_min],
                                        [project_x_min, project_y_max],
                                        [project_x_max, project_y_max],

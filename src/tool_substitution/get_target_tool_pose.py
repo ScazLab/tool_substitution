@@ -81,6 +81,7 @@ def get_scaling_T(scale=np.ones((1,3)), center=np.zeros((1,3))):
 
     return get_T_from_R_p(R=R, p=p)
 
+
 def T_inv(T):
     """
     Returns inverse of T.
