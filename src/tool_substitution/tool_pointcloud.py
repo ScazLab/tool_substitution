@@ -97,7 +97,10 @@ class ToolPointCloud(object):
         Returns the segment to which idx of point belongs.
         @idx the index of the point.
         """
-        return self.segments[idx]
+
+        segs, counts = np.unique(self.segments[idx], return_counts=True)
+        return segs[np.argmax(counts)]
+        # return self.segments[idx]
 
 
     def get_pnts_in_segment(self, segment):
@@ -105,10 +108,10 @@ class ToolPointCloud(object):
         Returns all the points in segment.
         @segment, the number of the segment.
         """
-        assert(segment in np.unique(self.segments))
+        # assert(segment in np.unique(self.segments))
 
         idx = np.where(self.segments == segment)[0]
-        return self.pnts[idx]
+        return self.pnts[idx, :]
 
 
     def get_action_segment(self):
@@ -137,20 +140,25 @@ class ToolPointCloud(object):
         point in the context of just the segment with which it belongs.
         """
         seg = self.get_segment_from_point(idx)
-        offsets = np.array([self.segment_offsets[s] for s in seg])
-        idx = np.asarray(idx)
-        # print "idx ", idx
-        # print "offsets ", offsets
+        pnt = self.get_pnt(idx)
+        seg_pnts = self.get_pnts_in_segment(seg)
 
-        return idx - offsets
+        idx = (seg_pnts[:,None] == pnt).all(2).any(1)
+        print("IDX ", idx)
+
+        return idx
+
 
     def segment_idx_to_idx(self, seg, seg_idx):
         """
         Given a point idx within a particular segment, get the idx
         of the same point in the context of entire pointcloud.
         """
-        offsets = [self.segment_offsets[s] for s in seg]
-        return seg_idx + offsets
+        seg_pnts = self.get_pnts_in_segment(seg)
+        seg_pnt = seg_pnts[seg_idx, :]
+
+        return (self.pnts[:, None] == seg_pnt).all(2).any(1)
+
 
     """
     The aruco_frame related functions are yet to be integrated with the rest of this class.
@@ -309,8 +317,6 @@ class ToolPointCloud(object):
         bb_trimed = self.bb.bb.copy()
         bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
         bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
-        print "bb_trimed"
-        print bb_trimed
         # convert the bbs to the right frame:
         bb_trimed_axis_frame = np.matmul(np.linalg.inv(self.get_axis(axis_order)),
                                          bb_trimed.T).T
