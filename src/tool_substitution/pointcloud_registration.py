@@ -28,11 +28,11 @@ def preprocess_point_cloud(pcd, voxel_size, norm_fn=None):
     if norm_fn is None:
 
         pcd_down.estimate_normals(
-            o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=30))
+            o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=50))
     else:
         pcd_down.normals = o3d.io.read_point_cloud(norm_fn)
 
-    radius_feature = voxel_size * 5
+    radius_feature = voxel_size * 10
     print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
     pcd_fpfh = o3d.registration.compute_fpfh_feature(
         pcd_down,
@@ -40,14 +40,14 @@ def preprocess_point_cloud(pcd, voxel_size, norm_fn=None):
     return pcd_down, pcd_fpfh
 
 
-def prepare_dataset(pnts1, pnts2, voxel_size):
+def prepare_dataset(src_pnts, target_pnts, voxel_size):
     print(":: Load two point clouds and disturb initial pose.")
 
     source = o3d.geometry.PointCloud()
     target = o3d.geometry.PointCloud()
 
-    source.points = o3d.utility.Vector3dVector(pnts1)
-    target.points = o3d.utility.Vector3dVector(pnts2)
+    source.points = o3d.utility.Vector3dVector(src_pnts)
+    target.points = o3d.utility.Vector3dVector(target_pnts)
 
 
     trans_init = np.asarray([[1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0],
@@ -95,27 +95,27 @@ def get_rake_pcs(n=2000):
 
     gp = GeneratePointcloud()
 
-    pnts1, pnts2 = gp.get_both_rake_points(n)
+    pnts1, target_pnts = gp.get_both_rake_points(n)
     pc1 = ToolPointCloud(pnts1)
     pnts1 = pc1.get_pc_bb_axis_frame_centered()
 
-    # pnts2 = gp.mesh_to_pointcloud(n, "./tool_files/rake.stl")
-    pc2 = ToolPointCloud(pnts2)
-    # pnts2 = pc2.scale_pnts_to_target(pc1)
-    # pc2 = ToolPointCloud(pnts2)
+    # target_pnts = gp.mesh_to_pointcloud(n, "./tool_files/rake.stl")
+    pc2 = ToolPointCloud(target_pnts)
+    # target_pnts = pc2.scale_pnts_to_target(pc1)
+    # pc2 = ToolPointCloud(target_pnts)
 
-    pnts2 = pc2.get_pc_bb_axis_frame_centered()
+    target_pnts = pc2.get_pc_bb_axis_frame_centered()
 
-    x_range = pnts2[0].max() - pnts2[0].min()
+    x_range = target_pnts[0].max() - target_pnts[0].min()
     voxel_size = x_range / 30
 
-    means = pnts2.mean(axis=0)
+    means = target_pnts.mean(axis=0)
     y_mean = means[1]
     z_mean = means[2]
 
-    pnts2 = pnts2[np.where(pnts2[:,2] < z_mean), :][0]
-    # pnts2 = pnts2[np.where(pnts2[:,1] < y_mean), :][0]
-    return pnts1, pnts2, voxel_size
+    target_pnts = target_pnts[np.where(target_pnts[:,2] < z_mean), :][0]
+    # target_pnts = target_pnts[np.where(target_pnts[:,1] < y_mean), :][0]
+    return pnts1, target_pnts, voxel_size
 
 def pc_registration(src_fn, target_fn, n_pnts=None, n_iter=3):
     """
@@ -180,23 +180,23 @@ def get_two_pc(n=2000):
     pnts1 = gp.get_random_ply(n)
     pc1 = ToolPointCloud(pnts1)
 
-    pnts2 = pc1.get_pc_bb_axis_frame_centered()
+    target_pnts = pc1.get_pc_bb_axis_frame_centered()
 
-    x_range = pnts2[0].max() - pnts2[0].min()
+    x_range = target_pnts[0].max() - target_pnts[0].min()
     voxel_size = x_range / 68.
 
     print "VOXEL SIZE: ", voxel_size
 
-    means = pnts2.mean(axis=0)
+    means = target_pnts.mean(axis=0)
     x_mean = means[0]
     z_mean = means[2]
-    # pnts2 = pnts2[np.where(pnts2[:,2] < z_mean), :][0]
-    # pnts2 = pnts2[np.where(pnts2[:,0] < x_mean), :][0]
-    pnts2 -= pnts2.mean()
+    # target_pnts = target_pnts[np.where(target_pnts[:,2] < z_mean), :][0]
+    # target_pnts = target_pnts[np.where(target_pnts[:,0] < x_mean), :][0]
+    target_pnts -= target_pnts.mean()
 
 
 
-    return pnts1, pnts2, voxel_size
+    return pnts1, target_pnts, voxel_size
 
 
 
