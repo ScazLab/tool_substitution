@@ -74,12 +74,15 @@ def get_scaling_T(scale=np.ones((1,3)), center=np.zeros((1,3))):
     @center (1x3 ndarray) center of scaling (this point will not be scaled.)
 
     returns corresponding T matrix.
+
+    https://math.stackexchange.com/questions/3245481/rotate-and-scale-a-point-around-different-origins
+
     """
+    trans_init  = get_T_from_R_p(p=center)
+    scale       = get_T_from_R_p(R=np.identity(3)*scale)
+    trans_final = get_T_from_R_p(p=center*-1.0 )
 
-    R = np.identity(3) * scale
-    p = (1 - scale) * center
-
-    return get_T_from_R_p(R=R, p=p)
+    return np.linalg.multi_dot([trans_init, scale, trans_final])
 
 
 def T_inv(T):
