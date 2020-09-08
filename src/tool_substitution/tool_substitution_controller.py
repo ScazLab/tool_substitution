@@ -32,7 +32,6 @@ from pointcloud_registration import prepare_dataset, draw_registration_result
 def gen_contact_surface(pc, pnt_idx):
     """
     Generare a contact surface on a pointcloud around a desired point.
-    
     """
     tree = cKDTree(pc)
     i =  tree.query_ball_point(pc[pnt_idx,:], .01)
@@ -54,9 +53,20 @@ def visualize_tool(pcd, cp_idx=None, segment=None):
         colors[cp_idx, : ] = np.array([1,0,0])
 
     p.colors = o3d.utility.Vector3dVector(colors)
-
     o3d.visualization.draw_geometries([p])
 
+def visualize_multiple_cps(pcd, orig_cp_idx, cp_idx_list):
+    p = deepcopy(pcd)
+    p.paint_uniform_color([0, 0, 1]) # Blue result
+
+    colors = np.asarray(p.colors)
+    colors[orig_cp_idx, :] = np.array([1, 0, 0])
+
+    for idx in cp_idx_list:
+        colors[idx, :] = np.random.uniform(size=(1,3))
+
+    p.colors = o3d.utility.Vector3dVector(colors)
+    o3d.visualization.draw_geometries([p])
 
 def visualize_reg(src, target, result, result_cp_idx=None, target_cp_idx=None):
 
@@ -468,8 +478,10 @@ class ToolSubstitution(object):
         icp_fit = best_icp.fitness # Fit score (between [0.0,1.0])
         icp_trans = best_icp.transformation # T matrix
 
-        print "ICP RESULTS"
-        visualize_reg(source, target, deepcopy(source).transform(icp_trans))
+        if self.visualize:
+            print "ICP RESULTS"
+            visualize_reg(source, target, deepcopy(source).transform(icp_trans))
+
         return icp_trans, icp_fit, source, target
 
     def refine_registration(self, init_trans, source, target, voxel_size):
@@ -530,13 +542,15 @@ class ToolSubstitution(object):
         # visualize_reg(source, target, pcds[src_idx])
         # print "SUB REG"
         # visualize_reg(source, target, pcds[sub_idx])
-        print "INV SRC REG"
         sub_T, src_T = pose_graph.nodes[sub_idx].pose, pose_graph.nodes[src_idx].pose
         # This alg rotates both the src and sub tools. We dont want the src tool to rotate 
         # at all so we apply its inverse T onto the sub tool to the same effect.
         final_T = np.matmul(T_inv(src_T), sub_T)
         aligned_source = deepcopy(source).transform(final_T)
-        visualize_reg(source, target, aligned_source)
+
+        if self.visualize:
+            print "INV SRC REG"
+            visualize_reg(source, target, aligned_source)
 
         return pcds[src_idx], aligned_source, final_T, fit
 
@@ -571,22 +585,31 @@ class ToolSubstitution(object):
             T_align = get_T_from_R_p()
 
 
+        # Refine initial icp 
         _, aligned_sub_pcd, T_align,_ = self.refine_registration(T_align,
                                                                sub_action_pcd,
                                                                src_action_pcd,
                                                                self.voxel_size)
 
-        print "TEST ALIGNMENT"
-        o3d.visualization.draw_geometries([src_action_pcd, src_action_pcd, self.T_src_pcd])
+        if self.visualize:
+            print "TEST ALIGNMENT"
+            o3d.visualization.draw_geometries([src_action_pcd, src_action_pcd, self.T_src_pcd])
+
+        # Apply T matrix from ICP.
+        if self.visualize:
+            print "DESCALING"
 
         self.T_sub_pcd.transform(T_align)
         # aligned_sub_pcd = sub_action_pcd.transform(T_align)
 
-        print "sub action part and full tool alignment"
-        o3d.visualization.draw_geometries([self.T_sub_pcd, aligned_sub_pcd])
+        if self.visualize:
+            print "sub action part and full tool alignment"
+            o3d.visualization.draw_geometries([self.T_sub_pcd, aligned_sub_pcd])
 
-        print "src action part and full tool alignment"
-        o3d.visualization.draw_geometries([src_action_pcd, self.T_src_pcd])
+        if self.visualize:
+            print "src action part and full tool alignment"
+            o3d.visualization.draw_geometries([src_action_pcd, self.T_src_pcd])
+
         aligned_src = np.asarray(src_action_pcd.points)
         aligned_sub = np.asarray(aligned_sub_pcd.points)
 
@@ -609,6 +632,7 @@ class ToolSubstitution(object):
         sub_cp_idx = self.sub_tool.segment_idx_to_idx([self._sub_action_segment],
                                                       sub_action_part_cp_idx)
 
+        self.sub_tool.contact_pnt_idx = sub_cp_idx
         print "SUB CP IDX ", sub_cp_idx
 
         mean_sub_action_part_cp = np.mean(aligned_sub[sub_action_part_cp_idx, :],axis=0)
@@ -617,20 +641,26 @@ class ToolSubstitution(object):
         scale_f = np.diag(scale_T)[:3] # get first 3 diag entries.
         final_scale_T = get_scaling_T(scale_f, mean_sub_action_part_cp)
 
-        visualize_tool(aligned_sub_pcd, sub_action_part_cp_idx)
-        visualize_tool(self.T_sub_pcd, sub_cp_idx)
+        if self.visualize:
+            print "Visualizing sub contact point"
+            visualize_tool(aligned_sub_pcd, sub_action_part_cp_idx)
+            print "visualizing src contact point"
+            visualize_tool(self.T_sub_pcd, sub_cp_idx)
 
 
-        print "DESCALING"
         descaled_aligned_sub = deepcopy(self.T_sub_pcd).transform(final_scale_T)
         # descaled_aligned_sub = deepcopy(aligned_sub_pcd).transform(scale_T)
         # descaled_sub_action = deepcopy(aligned_sub_pcd).transform(final_scale_T)
-        visualize_reg(aligned_sub_pcd, self.sub_pcd, descaled_aligned_sub)
+        if self.visualize:
+            print "DESCALING"
+            visualize_reg(aligned_sub_pcd, self.sub_pcd, descaled_aligned_sub)
+
         self.T_sub_pcd.transform(final_scale_T)
         # descaled_sub_mean_cp = np.mean(np.asarray(descaled_aligned_sub.points)[sub_cp_idx, :], axis=0)
         # descaled_sub_mean_cp = np.mean(np.asarray(descaled_aligned_sub.points)[sub_action_part_cp_idx, :], axis=0)
-        print "VISUALIZING DESCALE BEFORE TRANS"
-        visualize_reg(aligned_sub_pcd, src_action_pcd, descaled_aligned_sub)
+        if self.visualize:
+            print "VISUALIZING DESCALE BEFORE TRANS"
+            visualize_reg(aligned_sub_pcd, src_action_pcd, descaled_aligned_sub)
 
         # T_translate = get_T_from_R_p(p=np.mean(src_contact_pnt,axis=0)-descaled_sub_mean_cp)
         # descaled_aligned_sub.transform(T_translate)
@@ -701,21 +731,50 @@ class ToolSubstitution(object):
 
         return final_trans, self.sub_tool.get_pnt(sub_cp_idx)
 
-    def test_scaling(self):
-        print "TESTING SCALING..."
-        if len(self.scale_Ts) > 1:
-            scale_T = T_inv(np.linalg.multi_dot(self.scale_Ts)) # Get inverted scaling T
-        else:
-            scale_T = T_inv(self.scale_Ts[0])
-        descaled_sub = deepcopy(self.T_sub_pcd).transform(scale_T)
-
-        o3d.visualization.draw_geometries([self.sub_pcd, descaled_sub])
 
 
+    def self_substitute(self):
+        """
+        Given a calculated contact point on a substitute tool, we want to find other viable potential contact surfaces.
+        https://stats.stackexchange.com/questions/14673/measures-of-similarity-or-distance-between-two-covariance-matrices
+        """
 
+        sub_cp = None
+        N_pnts = 10
+
+        if self.sub_tool.contact_pnt_idx is None:
+            T, cp = self.get_T_cp(n_iter=1)
+            sub_cp = cp
+
+        sub_pnts = self.sub_tool.pnts
+        cp_cov = np.cov(sub_cp.T) # Get covariance matrix of orig contact area.
+
+        # Get N_pnts random pnts from the sub tool to be the centroid of new contact
+        # surface.
+        rand_idx = np.random.randint(0, self.sub_tool.pnts.shape[0], size=N_pnts)
+        scores = []
+        for i in rand_idx:
+            rand_pnt = sub_pnts[i, :]
+            mdist = cdist(sub_pnts, [rand_pnt], metric='mahalanobis', V=cp_cov)[:,0]
+
+            new_cp_idx = mdist < 1 # All points < 1 stdev from rand_pnt
+            new_cp_cov = np.cov(sub_pnts[new_cp_idx, :].T)
+            # Correlation matrix distance to determine how similar the covs are.
+            score = 1 - (np.trace(cp_cov.dot(new_cp_cov)) / (np.dot(norm(cp_cov, ord='fro'),
+                                                                    norm(new_cp_cov, ord='fro'))))
+            print "SCORE: ", score
+            scores.append((new_cp_idx, score))
+
+        # best_cp_idx = cp_idx_list[np.argmin(scores)]
+        best_cp_idx, score = min(scores, key=lambda s: s[1])
+        cp_idx_list = [idx for idx,_ in scores]
+        
+        visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, cp_idx_list)
+        visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, [best_cp_idx])
 
     def main(self):
-        return self.get_T_cp(n_iter=3)
+        # return self.get_T_cp(n_iter=3)
+        return self.self_substitute()
 
 
 
@@ -728,13 +787,13 @@ if __name__ == '__main__':
     # pnts1 = gp.get_random_pointcloud(n)
     # pnts2 = gp.get_random_pointcloud(n)
     # pnts2 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=False)
-    pnts1 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=True)
+    pnts2 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=True)
     # pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/b_wildo_bowl.ply", get_segments=False)
     # pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply", get_segments=False)
     #pnts1 = np.random.uniform(0, 1, size=(n, 3))
     #pnts2 = np.random.uniform(1.4, 2, size=(n, 3))
     # 
-    pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_knifekitchen2.ply",get_segments=True)
+    pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/a_knifekitchen2.ply",get_segments=True)
     # pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/a_chineseknife.ply", get_segments=False)
     # pnts2 = gp.load_pointcloud("./tool_files/point_clouds/a_bowlchild.ply", None)
     # pnts2 = gp.mesh_to_pointcloud("/rake_remove_box/2/rake_remove_box_out_2_40_fused.ply", n)
@@ -764,7 +823,7 @@ if __name__ == '__main__':
     # visualize(sub.pnts, sub.get_pnt(cntct_pnt2), segments=sub.segments)
     # sub = ToolPointCloud(np.vstack([pnts2.T, sub_seg]).T)
 
-    ts = ToolSubstitution(src, sub, voxel_size=0.005, visualize=True)
+    ts = ToolSubstitution(src, sub, voxel_size=0.005, visualize=False)
     T, cp = ts.main()
 
     src_pcd = o3d.geometry.PointCloud()
