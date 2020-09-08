@@ -131,8 +131,9 @@ class ToolSubstitution(object):
 
     def nonrigid_registration(self, src, sub):
         # tf_param = bcpd.registration_bcpd(sub, src)
-        tf_param,a,b = cpd.registration_cpd(sub, src, tf_type_name='nonrigid',maxiter=50000,
-                                            w=.1,tol=.00001)
+        print "PERFORMING NON RIGID REG"
+        tf_param,a,b = cpd.registration_cpd(sub, src, tf_type_name='nonrigid',
+                                            maxiter=500000, w=.1, tol=.000001)
         result_nonrigid = deepcopy(sub)
         result_rigid = deepcopy(sub)
 
@@ -148,6 +149,7 @@ class ToolSubstitution(object):
         # o3d.visualization.draw_geometries([sub,src, result_rigid, result_nonrigid])
         o3d.visualization.draw_geometries([sub,src, result_nonrigid])
 
+        return result_nonrigid
 
 
     def _icp_wrapper(self, sub, src, sub_fpfh, src_fpfh, corr_thresh, n_iter=5):
@@ -192,7 +194,6 @@ class ToolSubstitution(object):
 
         return max(results, key=lambda i:i.fitness)
 
-    
     def _get_sub_pnts(self, get_segments=True):
         """
         Get ndarray of points from o3d pointcloud.
@@ -768,13 +769,47 @@ class ToolSubstitution(object):
         # best_cp_idx = cp_idx_list[np.argmin(scores)]
         best_cp_idx, score = min(scores, key=lambda s: s[1])
         cp_idx_list = [idx for idx,_ in scores]
-        
-        visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, cp_idx_list)
-        visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, [best_cp_idx])
+
+        if self.visualize:
+            visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, cp_idx_list)
+            visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, [best_cp_idx])
+
+
+    def segment_tool_nonrigid(self):
+        """
+        Use non-rigid icp in order to determine contact surface on src tool.
+        """
+        source, target, source_down, target_down, source_fpfh, target_fpfh = \
+            prepare_dataset(self.sub_tool.pnts , self.src_tool.pnts, 0.005)
+        # Get registered sub tool
+        sub_result  = self.nonrigid_registration(target_down, source_down)
+        # contact pnt of src tool.
+        src_cp = self.src_tool.pnts[self.src_tool.contact_pnt_idx, :]
+        # Estimates contact surface on downasampled sub tool.
+        sub_downsamp_cp_idx = self._get_contact_surface(src_cp,
+                                                        np.asarray(sub_result.points),
+                                                        np.asarray(target_down))
+
+
+        # Want to get the contact surface but on the full, upscaled pointcloud.
+        # We do this by finding the points in a .005cm ball around above contact surface
+        # superimposed on the upscaled pointcloud.
+        tree = cKDTree(self.sub_tool.pnts)
+        idx_list = tree.query_ball_point(np.asarray(source_down.points)[sub_downsamp_cp_idx, :],
+                                         .005)
+        idx = [i for l in idx_list for i in l]
+
+        if self.visualize:
+            visualize_tool(source_down, sub_downsamp_cp_idx)
+            visualize_tool(source, idx)
+
+        return idx
+
 
     def main(self):
         # return self.get_T_cp(n_iter=3)
-        return self.self_substitute()
+        # return self.self_substitute()
+        self.segment_tool_nonrigid()
 
 
 
