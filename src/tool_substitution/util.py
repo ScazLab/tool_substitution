@@ -1,8 +1,20 @@
 import numpy as np
+import open3d as o3d
 import matplotlib.pyplot as plt
+
 from scipy.spatial.transform import Rotation as Rot
 from mpl_toolkits.mplot3d import Axes3D, art3d
 from sklearn.metrics.pairwise import cosine_similarity
+
+
+def np_to_o3d(pnts):
+    """
+    Get o3d pc from ToolPointcloud object.
+    """
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pnts)
+
+    return pcd
 
 def close_to(m, n, error=1e-6):
     return m >= n - error and m <= n + error
@@ -359,11 +371,9 @@ def visualize_vectors(vecs):
 
     plt.show()
 
-if __name__ == '__main__':
-    # src = np.array([1.40, -.20,-.20])
-    # src = np.array([0, -1.20, .20])
-    sub = np.array([-1,0,0])
 
-    R = rotation_matrix_from_box_rots(sub,src)
-    print "TARGET: ", src
-    print "RESULT: ", R.dot(sub.T)
+
+if __name__ == '__main__':
+    pass
+
+
