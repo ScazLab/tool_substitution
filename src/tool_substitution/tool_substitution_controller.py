@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import numpy as np
 from copy import deepcopy
-from numpy import cross
 from numpy.linalg import norm
 
 from itertools import permutations
@@ -133,12 +132,13 @@ class ToolSubstitution(object):
         # tf_param = bcpd.registration_bcpd(sub, src)
         print "PERFORMING NON RIGID REG"
         tf_param,a,b = cpd.registration_cpd(sub, src, tf_type_name='nonrigid',
-                                            maxiter=500000, w=.1, tol=.000001)
+                                            maxiter=500000, w=.1, tol=.00001)
         result_nonrigid = deepcopy(sub)
         result_rigid = deepcopy(sub)
 
         result_nonrigid.points = tf_param.transform(result_nonrigid.points)
         # result_rigid.points = tf_param.rigid_trans.transform(result_rigid.points)
+        # result_rigid.points = tf_param.v + result_rigid.points
 
         sub.paint_uniform_color([1, 0, 0])
         src.paint_uniform_color([0, 1, 0])
@@ -146,8 +146,10 @@ class ToolSubstitution(object):
         result_nonrigid.paint_uniform_color([0, 0, 1])
         # print "trans ", tf_param.rigid_trans
 
-        # o3d.visualization.draw_geometries([sub,src, result_rigid, result_nonrigid])
-        o3d.visualization.draw_geometries([sub,src, result_nonrigid])
+        # print "rigid result"
+        # visualize_reg(sub, src, result_rigid)
+        print "nonrigid result"
+        visualize_reg(sub,src, result_nonrigid)
 
         return result_nonrigid
 
@@ -353,24 +355,38 @@ class ToolSubstitution(object):
         Get a random contact point and rotation matrix for substitute tool.
         """
 
-        # src_action_seg = self.src_tool.get_segment_from_point(self.src_tool.contact_pnt_idx)
-        scaled_sub_pnts, _ = self.sub_tool.scale_pnts_to_target(self.src_tool)
-        R = Rot.random(num=1).as_dcm() # Generate a radom rotation matrix.
-        T = get_T_from_R_p(p=np.zeros((1,3)), R=R )
-        rot_sub_pnts = R.dot(scaled_sub_pnts.T).T
+        src = self._np_to_o3d(self.src_tool.get_unnormalized_pc())
+        sub = self._np_to_o3d(self.sub_tool.get_unnormalized_pc())
+        sub_init = deepcopy(sub)
 
-        src_cntct_pnt = self.src_tool.get_normalized_pc()[self.src_tool.contact_pnt_idx, :]
-        _, sub_contact_pnt_idx = self._get_closest_pnt(src_cntct_pnt,
-                                                    rot_sub_pnts)
+        R = Rot.random(num=1).as_dcm()[0] # Generate a radom rotation matrix.
+        T = get_T_from_R_p(R=R)
+        sub.transform(T)
 
-        sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
+        src_cp = np.mean(np.asarray(src.points)[self.src_tool.contact_pnt_idx, :],
+                         axis=0)
+        _, sub_contact_pnt_idx = self._get_closest_pnt(src_cp,
+                                                       np.asarray(sub.points))
 
-        T = get_T_from_R_p(p=np.zeros((1,3)), R=R )
+        # Translate the the sub tool such that the contact points are overlapping
+        sub_cp = np.asarray(sub.points)[sub_contact_pnt_idx, :]
+        trans_T = get_T_from_R_p(p=src_cp-sub_cp)
+        final_T = np.matmul(trans_T, T)
+
+        sub.transform(trans_T)
+
+        # Generate a contact surface around the closest point.
+        sub_contact_pnt = gen_contact_surface(np.asarray(sub.points),
+                                              sub_contact_pnt_idx)
+        # sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
+
+        # T = get_T_from_R_p(p=np.zeros((1,3)), R=R )
         if self.visualize:
-            visualize_two_pcs(self.sub_tool.pnts, rot_sub_pnts)
-            visualize(self.sub_tool.pnts, sub_contact_pnt, self.sub_tool.segments)
+            visualize_reg(sub_init, src, sub,
+                          result_cp_idx=sub_contact_pnt,
+                          target_cp_idx=self.src_tool.contact_pnt_idx)
 
-        return T, sub_contact_pnt
+        return final_T, sub_contact_pnt
 
     def _scale_pcs(self):
         """
@@ -404,6 +420,8 @@ class ToolSubstitution(object):
 
         self.scale_Ts.append(T_sub_action_part_scale) # Store scaling factor
 
+        print "SCALING TOOLS"
+        # o3d.visualization.draw_geometries([self.T_src_pcd, self.T_sub_pcd])
         # Sub tool AND src tool have been transformed, so make sure to account for both
         # for final sub rotation.
 
@@ -586,7 +604,7 @@ class ToolSubstitution(object):
             T_align = get_T_from_R_p()
 
 
-        # Refine initial icp 
+        # Refine initial icp alignment.
         _, aligned_sub_pcd, T_align,_ = self.refine_registration(T_align,
                                                                sub_action_pcd,
                                                                src_action_pcd,
@@ -594,11 +612,9 @@ class ToolSubstitution(object):
 
         if self.visualize:
             print "TEST ALIGNMENT"
-            o3d.visualization.draw_geometries([src_action_pcd, src_action_pcd, self.T_src_pcd])
-
-        # Apply T matrix from ICP.
-        if self.visualize:
-            print "DESCALING"
+            o3d.visualization.draw_geometries([src_action_pcd,
+                                               src_action_pcd,
+                                               self.T_src_pcd])
 
         self.T_sub_pcd.transform(T_align)
         # aligned_sub_pcd = sub_action_pcd.transform(T_align)
@@ -675,7 +691,8 @@ class ToolSubstitution(object):
         visualize_reg(descaled_aligned_sub, self.src_pcd,
                       deepcopy(descaled_aligned_sub).transform(self.temp_src_T))
         descaled_aligned_sub.transform(self.temp_src_T)
-        # This transformation accounts for the alignment of the src tool to its principal axes
+        # This transformation accounts for the alignment of the src tool to
+        # its principal axes
         self.T_sub_pcd.transform(self.temp_src_T)
 
         descaled_sub_pnts = np.asarray(self._get_sub_pnts(get_segments=False))
@@ -730,7 +747,7 @@ class ToolSubstitution(object):
         T_translate = get_T_from_R_p(p=(src_mean_cp-sub_mean_cp))
         final_trans = np.matmul(T_translate, final_trans)
 
-        return final_trans, self.sub_tool.get_pnt(sub_cp_idx)
+        return final_trans, self.sub_tool.get_unnormalized_pc()[sub_cp_idx,:]
 
 
 
@@ -774,15 +791,21 @@ class ToolSubstitution(object):
             visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, cp_idx_list)
             visualize_multiple_cps(self.sub_pcd, self.sub_tool.contact_pnt_idx, [best_cp_idx])
 
+        return best_cp_idx
 
     def segment_tool_nonrigid(self):
         """
         Use non-rigid icp in order to determine contact surface on src tool.
         """
+        self._scale_pcs()
         source, target, source_down, target_down, source_fpfh, target_fpfh = \
             prepare_dataset(self.sub_tool.pnts , self.src_tool.pnts, 0.005)
         # Get registered sub tool
         sub_result  = self.nonrigid_registration(target_down, source_down)
+        print "source normals: ", np.asarray(source_down.normals)
+        sub_result.estimate_normals(
+            o3d.geometry.KDTreeSearchParamHybrid(radius=self.voxel_size*2, max_nn=50))
+        print "new normals: ", np.asarray(sub_result.normals)
         # contact pnt of src tool.
         src_cp = self.src_tool.pnts[self.src_tool.contact_pnt_idx, :]
         # Estimates contact surface on downasampled sub tool.
@@ -806,10 +829,49 @@ class ToolSubstitution(object):
         return idx
 
 
+    def show_sub_grip_point(self):
+        """
+        Visualizes the grip point on the sub tool.
+        """
+
+        # Calculate the sub tool cp if it hasnt been calculated already.
+        if self.sub_tool.contact_pnt_idx is None:
+            T, cp = self.get_T_cp(n_iter=1)
+            sub_cp = cp
+
+        sub_action_seg = self.sub_tool.get_action_segment()
+
+        cp_mean = np.mean(sub_cp, axis=0)
+        other_segs = [s for s in self.sub_tool.segment_list if not s is sub_action_seg]
+
+
+        # Determine the most distant segment from the action segment to be used as
+        # grasp segment.
+        scores = []
+        for seg in other_segs:
+            seg_pnts = self.sub_tool.get_pnts_in_segment(seg)
+            seg_mean = np.mean(seg_pnts, axis=0)
+
+            scores.append((seg, seg_mean, norm(seg_mean-cp_mean)))
+
+        grip_seg, grip_mean, _ = max(scores, key=lambda s: s[2])
+        self.mahalanobis_thresh = .5 # This keeps the size of estimated grasp surface to 
+                                     # to reasonable level.
+        grip_surface_idx = self._get_contact_surface(grip_mean,
+                                                     self.sub_tool.pnts,
+                                                     self.sub_tool.pnts)
+
+        # print "SUB CONTACT PNT"
+        # visualize_tool(self.sub_pcd, self.sub_tool.contact_pnt_idx)
+        print "SUB grip PNT"
+        visualize_tool(self.sub_pcd, grip_surface_idx)
+
     def main(self):
-        # return self.get_T_cp(n_iter=3)
+        return self.get_T_cp(n_iter=5)
         # return self.self_substitute()
-        self.segment_tool_nonrigid()
+        # self.segment_tool_nonrigid()
+        # self.show_sub_grip_point()
+        # return self.get_random_contact_pnt()
 
 
 
@@ -822,15 +884,15 @@ if __name__ == '__main__':
     # pnts1 = gp.get_random_pointcloud(n)
     # pnts2 = gp.get_random_pointcloud(n)
     # pnts2 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=False)
-    pnts2 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=True)
-    # pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/b_wildo_bowl.ply", get_segments=False)
-    # pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply", get_segments=False)
+    # pnts1 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=True)
+    pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/b_wildo_bowl.ply", get_segments=False)
+    pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply", get_segments=False)
     #pnts1 = np.random.uniform(0, 1, size=(n, 3))
     #pnts2 = np.random.uniform(1.4, 2, size=(n, 3))
     # 
-    pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/a_knifekitchen2.ply",get_segments=True)
-    # pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/a_chineseknife.ply", get_segments=False)
-    # pnts2 = gp.load_pointcloud("./tool_files/point_clouds/a_bowlchild.ply", None)
+    # pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_knifekitchen2.ply",get_segments=True)
+    # pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_chineseknife.ply", get_segments=True)
+    # # pnts2 = gp.load_pointcloud("./tool_files/point_clouds/a_bowlchild.ply", None)
     # pnts2 = gp.mesh_to_pointcloud("/rake_remove_box/2/rake_remove_box_out_2_40_fused.ply", n)
     # pnts1 = gp.load_pointcloud('./tool_files/point_clouds/a_bowl.ply', None)
     # pnts1 = gp.mesh_to_pointcloud('a_knifekitchen2/2/a_knifekitchen2_out_4_60_fused.ply',n , get_color)
@@ -858,7 +920,7 @@ if __name__ == '__main__':
     # visualize(sub.pnts, sub.get_pnt(cntct_pnt2), segments=sub.segments)
     # sub = ToolPointCloud(np.vstack([pnts2.T, sub_seg]).T)
 
-    ts = ToolSubstitution(src, sub, voxel_size=0.005, visualize=False)
+    ts = ToolSubstitution(src, sub, voxel_size=0.005, visualize=True)
     T, cp = ts.main()
 
     src_pcd = o3d.geometry.PointCloud()
