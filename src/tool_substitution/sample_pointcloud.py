@@ -15,7 +15,8 @@ from sklearn.cluster import KMeans
 
 from plyfile import PlyData, PlyElement
 
-from util import visualize_two_pcs
+from get_target_tool_pose import get_T_from_R_p
+
 
 PLY_DIR_PATH = "./tool_files/data_demo_segmented_numbered/"
 TOOL_DIR     = "../../tool_files/point_clouds/"
@@ -143,20 +144,33 @@ class GeneratePointcloud(object):
         self.m2p = Mesh2Pointcloud
 
     def _get_pc_with_segments(self, pcd):
+        """
+        @pcd: o3d pointcliud.
+        returns: (4x4) ndarray representation of segmented points where cols 0-3 contain the
+        points and col 4 contains segmentation info.
+
+        """
         pnts = np.asarray(pcd.points)
-        segments = np.unique(np.asarray(pcd.colors))
-        segment_dict = {}
+        # Determine all segments (each is (1x3) RGB ndarray)
+        segments = np.unique(np.asarray(pcd.colors), axis=0).tolist()
 
-        for s in range(segments.shape[0]):
-            self.segment_dict[segments[s]] = s
-
-        segment_array = np.apply_along_axis(lambda c: segment_dict(c),
+        # Convert RGB segments to ints
+        segment_array = np.apply_along_axis(lambda c: segments.index(c.tolist()),
                                             axis=1,
                                             arr=np.asarray(pcd.colors))
 
         return np.vstack([pnts.T, segment_array]).T
 
     def _gen_segmented_pc(self, pcd):
+        """
+        If pointcloud is not segmented, generate 2 segments naively using kmeans.
+
+        @pcd: o3d pointcloud.
+        returns: (4x4) ndarray representation of segmented points where cols 0-3 contain the
+        points and col 4 contains segmentation info.
+
+
+        """
         print "Generating PC segments..."
         pnts = np.asarray(pcd.points)
         kmeans = KMeans(n_clusters=2).fit(pnts)
@@ -165,6 +179,16 @@ class GeneratePointcloud(object):
 
 
     def load_pointcloud(self, fn, n=None, get_segments=False):
+        """
+        Load pointcloud from file.
+
+        @fn: str, path to pointcloud file.
+        @get_segments: bool, whether to return segmentation info of points
+
+        returns: (4x4) ndarray representation of segmented points where cols 0-3 contain the
+        points and col 4 contains segmentation info.
+
+        """
         print "Loading {}...".format(fn)
         pcd = o3d.io.read_point_cloud(fn)
         pnts = np.asarray(pcd.points)
@@ -198,95 +222,31 @@ class GeneratePointcloud(object):
 
 
 
-    def get_random_ply(self, n, get_color=False):
-        segments = 10
-        k = ""
-        tool = random.choice(os.listdir(PLY_DIR_PATH))
-        while not segments <= 3:
-            k  =  random.choice(os.listdir(os.path.join(PLY_DIR_PATH, tool)))
-            segments = int(k)
-            print("SEG ", segments)
-        f    = random.choice(os.listdir( os.path.join(PLY_DIR_PATH, tool, k) ))
-        path = os.path.join(PLY_DIR_PATH,tool,k,f)
-        print("LOADING {}\n".format(path))
+    def get_rake(self, get_segments=True):
+        return self.load_pointcloud("../../tool_files/rake.ply", get_segments=get_segments)
 
-        return self.mesh_to_pointcloud(path, n, get_color)
+    def get_a_bowl(self, get_segments=True):
+        return self.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply",
+                                  get_segments=get_segments)
 
-    def get_knife_points(self, n):
-        m = Mesh('./tool_files/knife.stl')
-        pnts = self.m2p(n, m).get_pointcloud()
-        return np.array(pnts)        
+    def get_a_knifekitchen2(self, get_segments=True):
+        return self.load_pointcloud("../../tool_files/point_clouds/a_knifekitchen2.ply",
+                                    get_segments=get_segments)
 
-    def get_guitar_points(self, n):
-        # m = mesh.Mesh.from_file('./tool_files/guitar.stl')
-        m = Mesh('./tool_files/guitar.stl')
-        pnts = self.m2p(n, m).get_pointcloud()
-        # This removes points for the human figure modeled in this file
-        return np.array([pnt for pnt in pnts if pnt[0] > 1000])
+    def get_a_bowl(self, get_segments=True):
+        return self.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply",
+                                    get_segments=get_segments)
 
 
-    def get_man_points(self, n):
-        # m = mesh.Mesh.from_file('./tool_files/guitar.stl')
-        m = Mesh('./tool_files/guitar.stl')
-        pnts = self.m2p(n, m).get_pointcloud()
-        # This gets only the points for the human figure modeled in this file
-        return np.array([pnt for pnt in pnts if pnt[0] < 1000])
-
-    def get_saw_points(self, n):
-        # m = mesh.Mesh.from_file('./tool_files/tools.stl')
-        m = Mesh('./tool_files/tools.stl')
-        pnts = self.m2p(n, m).get_pointcloud()
-        # This gets only the points for the human figure modeled in this file
-        return np.array([pnt for pnt in pnts if pnt[0] > 2200])
-
-    def test_sampling(self, n, mesh):
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-
-        pnts = self.m2p(n, mesh)
-        # pnts = get_saw_points(n)
-
-    def get_hammer_points(self, n):
-        # m = mesh.Mesh.from_file('./tool_files/tools.stl')
-        m = Mesh('./tool_files/tools.stl')
-        pnts = self.m2p(n, m).get_pointcloud()
-        # This gets only the points for the human figure modeled in this file
-        return np.array([pnt for pnt in pnts if pnt[0] > 1914 and pnt[0] < 2200])
-
-    def get_rake_points(self, n):
-        # m = mesh.Mesh.from_file('./tool_files/rake.stl')
-        m = Mesh('./tool_files/rake_recap.stl')
-        pnts = self.m2p(n, m).get_pointcloud()
-
-        return np.array([pnt for pnt in pnts if pnt[2] > 4.184])
-
-    def get_both_rake_points(self, n):
-        # m = mesh.Mesh.from_file('./tool_files/rake.stl')
-        m = Mesh('./tool_files/rake.stl')
-        pnts = self.m2p(n, m).get_pointcloud()
-
-        return np.array([pnt for pnt in pnts if pnt[2] > 4.184]), pnts
+    def gen_rectangle(self, n):
+        return np.random.uniform(size=(n, 3))
 
 
-    def get_l_points(self, n):
 
-        rect1_x = np.random.uniform(-1, 0, size=(n, ))
-        rect1_y = np.random.uniform(0, 3, size=(n, ))
-        rect1_z = np.random.uniform(0, 2, size=(n, ))
-        rect1 = np.array([rect1_x, rect1_y, rect1_z]).T
-
-        rect2_x = np.random.uniform(-1, 4, size=(n, ))
-        rect2_y = np.random.uniform(-1, 0, size=(n, ))
-        rect2_z = np.random.uniform(0, 2, size=(n, ))
-        rect2 = np.array([rect2_x, rect2_y, rect2_z]).T
-
-        return np.vstack([rect1, rect2])
 
 
 if __name__ == '__main__':
-    gp = GeneratePointcloud()
-    
+    pass
     # guitar_mesh = mesh.Mesh.from_file('./tool_files/guitar.stl'
     # tools_mesh = mesh.Mesh.from_file('./tool_files/tools.stl')
     #tools_mesh = Mesh('./tool_files/tools.stl')
