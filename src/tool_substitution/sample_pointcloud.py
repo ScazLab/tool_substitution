@@ -7,13 +7,13 @@ import random
 
 import open3d as o3d
 import stl
-from stl import mesh
+#from stl import mesh
 
 from matplotlib import pyplot as plt
 from mpl_toolkits import mplot3d
 from sklearn.cluster import KMeans
 
-from plyfile import PlyData, PlyElement
+#from plyfile import PlyData, PlyElement
 
 from get_target_tool_pose import get_T_from_R_p
 
@@ -178,7 +178,7 @@ class GeneratePointcloud(object):
         return np.vstack([pnts.T, kmeans.labels_]).T
 
 
-    def load_pointcloud(self, fn, n=None, get_segments=False):
+    def load_pointcloud(self, fn, n=None, gen_segments=False):
         """
         Load pointcloud from file.
 
@@ -193,11 +193,11 @@ class GeneratePointcloud(object):
         pcd = o3d.io.read_point_cloud(fn)
         pnts = np.asarray(pcd.points)
 
-        if get_segments:
+        if gen_segments:
+            pnts = self._gen_segmented_pc(pcd)
+        else:
             if pcd.has_colors():
                 pnts = self._get_pc_with_segments(pcd)
-            else:
-                pnts = self._gen_segmented_pc(pcd)
 
         return pnts
 
