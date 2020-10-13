@@ -308,7 +308,9 @@ class ToolPointCloud(object):
         bb_trimed = np.delete(bb_trimed, np.s_[4], axis=0)
         bb_trimed = np.delete(bb_trimed, np.s_[-1], axis=0)
 
-        return np.mean(bb_trimed, axis=0)
+        bb_trimed_axis_frame = np.matmul(np.linalg.inv(self.get_axis()),
+                                         bb_trimed.T).T
+        return np.mean(bb_trimed_axis_frame, axis=0)
 
 
     def get_pc_bb_axis_frame_centered(self, axis_order=[0,1,2]):
