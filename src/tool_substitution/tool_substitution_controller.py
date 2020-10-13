@@ -38,36 +38,43 @@ def gen_contact_surface(pc, pnt_idx):
     return i
 
 
-def visualize_tool(pcd, cp_idx=None, segment=None):
+def visualize_tool(pcd, cp_idx=None, segment=None, name="Tool"):
 
     p = deepcopy(pcd)
     p.paint_uniform_color([0, 0, 1]) # Blue result
 
     colors = np.asarray(p.colors)
+    print segment
+    _, count = np.unique(segment, return_counts=True)
+
+    print "SEGMENT COUNTS: ", count
+
 
     if not segment is None:
         colors[segment==0, :] = np.array([0,1,0])
         colors[segment==1, :] = np.array([0,.5,.5])
+
     if not cp_idx is None:
         colors[cp_idx, : ] = np.array([1,0,0])
 
     p.colors = o3d.utility.Vector3dVector(colors)
-    o3d.visualization.draw_geometries([p])
+    o3d.visualization.draw_geometries([p], name)
 
-def visualize_multiple_cps(pcd, orig_cp_idx, cp_idx_list):
+def visualize_multiple_cps(pcd, orig_cp_idx, cp_idx_list, name="Multiple cps"):
     p = deepcopy(pcd)
     p.paint_uniform_color([0, 0, 1]) # Blue result
 
     colors = np.asarray(p.colors)
     colors[orig_cp_idx, :] = np.array([1, 0, 0])
+ 
 
     for idx in cp_idx_list:
         colors[idx, :] = np.random.uniform(size=(1,3))
 
     p.colors = o3d.utility.Vector3dVector(colors)
-    o3d.visualization.draw_geometries([p])
+    o3d.visualization.draw_geometries([p], name)
 
-def visualize_reg(src, target, result, result_cp_idx=None, target_cp_idx=None):
+def visualize_reg(src, target, result, result_cp_idx=None, target_cp_idx=None, name="Result"):
 
     s = deepcopy(src)
     t = deepcopy(target)
@@ -88,7 +95,7 @@ def visualize_reg(src, target, result, result_cp_idx=None, target_cp_idx=None):
         t.colors = o3d.utility.Vector3dVector(colors)
 
 
-    o3d.visualization.draw_geometries([s, t, r])
+    o3d.visualization.draw_geometries([s, t, r], name)
 
 
 class ToolSubstitution(object):
@@ -113,7 +120,8 @@ class ToolSubstitution(object):
 
         # Params for ICP
         self.voxel_size = voxel_size
-        self.correspondence_thresh = voxel_size * 2
+        # self.correspondence_thresh = voxel_size * 2
+        self.correspondence_thresh = voxel_size *.5
         # self.correspondence_thresh = voxel_size * .1
         # Acceptable amount of alignment loss after applying ICP.
         # Often the quantitatively alignment will drop, but qualitatively it gets better.
@@ -125,7 +133,8 @@ class ToolSubstitution(object):
         self.temp_src_T = np.identity(4)  # This stores temporary transformations we will later undo.
         self.scale_Ts = [] # Tracks all scalings of sub tool.
 
-        visualize_tool(self.src_pcd, self.src_tool.contact_pnt_idx, self.src_tool.segments)
+        visualize_tool(self.src_pcd, self.src_tool.contact_pnt_idx, 
+                       self.src_tool.segments, "Src tool with contact surface")
 
 
     def nonrigid_registration(self, src, sub):
@@ -231,10 +240,11 @@ class ToolSubstitution(object):
         """
         Creates a centered and aligned ToolPointCloud from unaligned ToolPointCloud
         """
-        T_align  = get_T_from_R_p(R=pc.get_axis())
-        T_center = get_T_from_R_p(p=pc.get_bb_centroid())
+        centroid = pc.get_bb_centroid() * -1 # subtract bb mean to center points
+        R = np.linalg.inv(pc.get_axis()) # align points to bb axes.
+        
+        return get_T_from_R_p(R=R, p=centroid)
 
-        return np.matmul(T_align, T_center)
 
     def _calc_best_orientation(self, sub_pcd, Rs):
         """
@@ -258,11 +268,12 @@ class ToolSubstitution(object):
                                                           self.correspondence_thresh)
             score = (T, rot_sub_pcd, dist.fitness)
             print "ALIGNMENT SCORE: ", score[2]
+            #visualize_reg(sub_pcd, self.T_src_pcd, rot_sub_pcd)
 
             scores.append(score)
 
         T, rot_sub, fit =  max(scores, key=lambda s:s[2])
-        # o3d.visualization.draw_geometries([rot_sub_pcd, self.T_src_pcd], "Aligned")
+        #o3d.visualization.draw_geometries([rot_sub, self.T_src_pcd], "Best orientation (score: {})".format(fit))
         return T, fit
 
     def _get_contact_surface(self, src_cps, sub_pnts,  source ):
@@ -400,7 +411,7 @@ class ToolSubstitution(object):
         self.T_src_pcd.transform(T_src)
         self.T_sub_pcd.transform(T_sub)
 
-        # o3d.visualization.draw_geometries([self.T_src_pcd, self.T_sub_pcd])
+        #o3d.visualization.draw_geometries([self.T_src_pcd, self.T_sub_pcd], "INITIAL ALIGNMENT")
 
         self.temp_src_T = T_inv(T_src) # To account for alignment of src tool along bb axis.
 
@@ -447,7 +458,7 @@ class ToolSubstitution(object):
         T_sub_scale = get_scaling_T(scale=scale_f)
         self.T_sub_pcd.transform(T_sub_scale)
         self.scale_Ts.append(T_sub_scale)
-        # o3d.visualization.draw_geometries([self.T_sub_pcd, self.T_src_pcd], "Aligned")
+        #o3d.visualization.draw_geometries([self.T_sub_pcd, self.T_src_pcd], "Aligned")
         scaled_sub_pc = ToolPointCloud(self._get_sub_pnts(), normalize=False)
         _, sub_action_pnt_idx = self._get_closest_pnt(src_action_part.mean(axis=0),
                                                       scaled_sub_pc.pnts)
@@ -467,11 +478,11 @@ class ToolSubstitution(object):
         self.T_sub_pcd.transform(T_sub_action_part_scale)
         self.scale_Ts.append(T_sub_action_part_scale)
 
-        # o3d.visualization.draw_geometries([self.T_src_pcd, self.T_sub_pcd], "Aligned")
+        #o3d.visualization.draw_geometries([self.T_src_pcd, self.T_sub_pcd], "Aligned")
         return src_action_part, sub_action_part
 
 
-    def icp_alignment(self, source, target, correspondence_thresh, n_iter=10):
+    def icp_alignment(self, source, target, correspondence_thresh, n_iter=10, name="ICP"):
         """
         Algin sub tool to src tool using ICP.
 
@@ -497,13 +508,13 @@ class ToolSubstitution(object):
         icp_fit = best_icp.fitness # Fit score (between [0.0,1.0])
         icp_trans = best_icp.transformation # T matrix
 
-        if self.visualize:
-            print "ICP RESULTS"
-            visualize_reg(source, target, deepcopy(source).transform(icp_trans))
+        # if self.visualize:
+        #     print "ICP RESULTS"
+        #     visualize_reg(source, target, deepcopy(source).transform(icp_trans), name)
 
         return icp_trans, icp_fit, source, target
 
-    def refine_registration(self, init_trans, source, target, voxel_size):
+    def refine_registration(self, init_trans, source, target, voxel_size, name="Reg result"):
 
 
         pose_graph = o3d.registration.PoseGraph()
@@ -569,7 +580,8 @@ class ToolSubstitution(object):
 
         if self.visualize:
             print "INV SRC REG"
-            visualize_reg(source, target, aligned_source)
+            visualize_reg(source, target, aligned_source,
+                name=name)
 
         return pcds[src_idx], aligned_source, final_T, fit
 
@@ -603,29 +615,31 @@ class ToolSubstitution(object):
             print "SKIPPING  INIT. ICP RESULTS, USING INIT. ALIGNMENT."
             T_align = get_T_from_R_p()
 
-
+        print "Refining registration..."
         # Refine initial icp alignment.
         _, aligned_sub_pcd, T_align,_ = self.refine_registration(T_align,
                                                                sub_action_pcd,
                                                                src_action_pcd,
-                                                               self.voxel_size)
+                                                               self.voxel_size,
+                                                               name="Aligned action parts")
 
         if self.visualize:
             print "TEST ALIGNMENT"
             o3d.visualization.draw_geometries([src_action_pcd,
                                                src_action_pcd,
-                                               self.T_src_pcd])
+                                               self.T_src_pcd],
+                                               "Testing sec action part alignment")
 
         self.T_sub_pcd.transform(T_align)
         # aligned_sub_pcd = sub_action_pcd.transform(T_align)
 
-        if self.visualize:
-            print "sub action part and full tool alignment"
-            o3d.visualization.draw_geometries([self.T_sub_pcd, aligned_sub_pcd])
+        # if self.visualize:
+        #     print "sub action part and full tool alignment"
+        #     o3d.visualization.draw_geometries([self.T_sub_pcd, aligned_sub_pcd])
 
-        if self.visualize:
-            print "src action part and full tool alignment"
-            o3d.visualization.draw_geometries([src_action_pcd, self.T_src_pcd])
+        # if self.visualize:
+        #     print "src action part and full tool alignment"
+        #     o3d.visualization.draw_geometries([src_action_pcd, self.T_src_pcd])
 
         aligned_src = np.asarray(src_action_pcd.points)
         aligned_sub = np.asarray(aligned_sub_pcd.points)
@@ -660,9 +674,11 @@ class ToolSubstitution(object):
 
         if self.visualize:
             print "Visualizing sub contact point"
-            visualize_tool(aligned_sub_pcd, sub_action_part_cp_idx)
+            visualize_tool(aligned_sub_pcd, sub_action_part_cp_idx, 
+                name="Transformed sub tool with calc'd contact surface")
             print "visualizing src contact point"
-            visualize_tool(self.T_sub_pcd, sub_cp_idx)
+            visualize_tool(self.T_sub_pcd, sub_cp_idx,
+                name="Transformed src tol with calc'd contact surface")
 
 
         descaled_aligned_sub = deepcopy(self.T_sub_pcd).transform(final_scale_T)
@@ -687,9 +703,9 @@ class ToolSubstitution(object):
         # visualize_reg(aligned_sub_pcd, src_action_pcd, descaled_aligned_sub)
 
 
-        print "HELOO"
-        visualize_reg(descaled_aligned_sub, self.src_pcd,
-                      deepcopy(descaled_aligned_sub).transform(self.temp_src_T))
+        # print "HELOO"
+        # visualize_reg(descaled_aligned_sub, self.src_pcd,
+        #               deepcopy(descaled_aligned_sub).transform(self.temp_src_T))
         descaled_aligned_sub.transform(self.temp_src_T)
         # This transformation accounts for the alignment of the src tool to
         # its principal axes
@@ -704,14 +720,16 @@ class ToolSubstitution(object):
         icp_T, icp_fit, _, _= self.icp_alignment(original_sub_pnts,
                                                  descaled_sub_pnts,
                                                  new_corr_thresh,
-                                                   n_iter)
+                                                 n_iter,
+                                                )
 
 
         aligned_sub_pcd,_, refine_T, refine_fit = self.refine_registration(icp_T,
                                                                            self.sub_pcd,
                                                                            # descaled_aligned_sub,
                                                                            self.T_sub_pcd ,
-                                                                           new_vox_size)
+                                                                           new_vox_size,
+                                                                        name="Aligning sub tool in init pos to transformed sub tool")
 
 
         print "ICP fit: ", icp_fit
@@ -733,7 +751,8 @@ class ToolSubstitution(object):
                           self.src_pcd,
                           deepcopy(self.sub_pcd).transform(final_trans),
                           result_cp_idx=sub_cp_idx,
-                          target_cp_idx=self.src_tool.contact_pnt_idx)
+                          target_cp_idx=self.src_tool.contact_pnt_idx,
+                          name="Final result applied to original sub tool.")
 
 
         # Must account for the fact that the src and sub tool pcs have been centered at
@@ -867,7 +886,7 @@ class ToolSubstitution(object):
         visualize_tool(self.sub_pcd, grip_surface_idx)
 
     def main(self):
-        return self.get_T_cp(n_iter=5)
+        return self.get_T_cp(n_iter=7)
         # return self.self_substitute()
         # self.segment_tool_nonrigid()
         # self.show_sub_grip_point()
@@ -885,8 +904,11 @@ if __name__ == '__main__':
     # pnts2 = gp.get_random_pointcloud(n)
     # pnts2 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=False)
     # pnts1 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=True)
-    pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/b_wildo_bowl.ply", get_segments=False)
-    pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply", get_segments=False)
+    #pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/b_wildo_bowl.ply", get_segments=False)
+    #pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply", get_segments=False)
+    pnts1 = gp.load_pointcloud("../../../meiying_crow_tool/pointcloud/tools/saw.ply", gen_segments=True)
+    pnts2 = gp.load_pointcloud("../../../meiying_crow_tool/pointcloud/tools/butcher_knife.ply", gen_segments=True)
+
     #pnts1 = np.random.uniform(0, 1, size=(n, 3))
     #pnts2 = np.random.uniform(1.4, 2, size=(n, 3))
     # 
@@ -904,7 +926,7 @@ if __name__ == '__main__':
     # src = sub
     # sub = shrink_pc(sub)
 
-    cntct_pnt = src.get_pc_bb_axis_frame_centered().argmax(axis=0)[1]
+    cntct_pnt = src.get_pc_bb_axis_frame_centered().argmax(axis=0)[0]
     src.contact_pnt_idx = gen_contact_surface(src.pnts, cntct_pnt)
 
 
@@ -920,7 +942,7 @@ if __name__ == '__main__':
     # visualize(sub.pnts, sub.get_pnt(cntct_pnt2), segments=sub.segments)
     # sub = ToolPointCloud(np.vstack([pnts2.T, sub_seg]).T)
 
-    ts = ToolSubstitution(src, sub, voxel_size=0.005, visualize=True)
+    ts = ToolSubstitution(src, sub, voxel_size=0.0025, visualize=True)
     T, cp = ts.main()
 
     src_pcd = o3d.geometry.PointCloud()
@@ -929,4 +951,4 @@ if __name__ == '__main__':
     src_pcd.points = o3d.utility.Vector3dVector(pnts1[:, :3])
     sub_pcd.points = o3d.utility.Vector3dVector(pnts2[:, :3])
 
-    visualize_reg(sub_pcd, src_pcd, sub_pcd.transform(T))
+    visualize_reg(sub_pcd, src_pcd, sub_pcd.transform(T), name="Final Result on uncentered PCS")
