@@ -20,7 +20,8 @@ from sample_pointcloud import GeneratePointcloud
 from util import (min_point_distance, rotation_matrix_from_vectors,
                   weighted_min_point_distance, visualize_two_pcs,
                   rotation_matrix_from_box_rots, visualize_vectors,
-                  r_x, r_y, r_z, visualize_contact_area)
+                  r_x, r_y, r_z, visualize_contact_area,
+                  visualize_reg, visualize_tool, visualize_multiple_cps)
 
 from scipy.spatial.transform import Rotation as Rot
 
@@ -36,66 +37,6 @@ def gen_contact_surface(pc, pnt_idx):
     i =  tree.query_ball_point(pc[pnt_idx,:], .01)
 
     return i
-
-
-def visualize_tool(pcd, cp_idx=None, segment=None, name="Tool"):
-
-    p = deepcopy(pcd)
-    p.paint_uniform_color([0, 0, 1]) # Blue result
-
-    colors = np.asarray(p.colors)
-    print segment
-    _, count = np.unique(segment, return_counts=True)
-
-    print "SEGMENT COUNTS: ", count
-
-
-    if not segment is None:
-        colors[segment==0, :] = np.array([0,1,0])
-        colors[segment==1, :] = np.array([0,.5,.5])
-
-    if not cp_idx is None:
-        colors[cp_idx, : ] = np.array([1,0,0])
-
-    p.colors = o3d.utility.Vector3dVector(colors)
-    o3d.visualization.draw_geometries([p], name)
-
-def visualize_multiple_cps(pcd, orig_cp_idx, cp_idx_list, name="Multiple cps"):
-    p = deepcopy(pcd)
-    p.paint_uniform_color([0, 0, 1]) # Blue result
-
-    colors = np.asarray(p.colors)
-    colors[orig_cp_idx, :] = np.array([1, 0, 0])
- 
-
-    for idx in cp_idx_list:
-        colors[idx, :] = np.random.uniform(size=(1,3))
-
-    p.colors = o3d.utility.Vector3dVector(colors)
-    o3d.visualization.draw_geometries([p], name)
-
-def visualize_reg(src, target, result, result_cp_idx=None, target_cp_idx=None, name="Result"):
-
-    s = deepcopy(src)
-    t = deepcopy(target)
-    r = deepcopy(result)
-
-    s.paint_uniform_color([1, 0, 0])    # Red src
-    t.paint_uniform_color([0, 1, 0]) # Green target
-    r.paint_uniform_color([0, 0, 1]) # Blue result
-
-    if not result_cp_idx is None:
-        colors = np.asarray(r.colors)
-        colors[result_cp_idx, :] = np.array([.5,.5,0])
-        r.colors = o3d.utility.Vector3dVector(colors)
-
-    if not target_cp_idx is None:
-        colors = np.asarray(t.colors)
-        colors[target_cp_idx, :] = np.array([.9,.1,0])
-        t.colors = o3d.utility.Vector3dVector(colors)
-
-
-    o3d.visualization.draw_geometries([s, t, r], name)
 
 
 class ToolSubstitution(object):
@@ -181,6 +122,8 @@ class ToolSubstitution(object):
 
         criteria = o3d.registration.RANSACConvergenceCriteria(max_iteration=400000,
                                                               max_validation=1000)
+        icp_criteria = o3d.registration.ICPConvergenceCriteria(max_iteration=300)
+
 
         results = []
 
@@ -196,7 +139,8 @@ class ToolSubstitution(object):
             result2 = o3d.registration.registration_icp(sub, src,
                                                         self.voxel_size,
                                                         result1.transformation,
-                                                        est_ptpln)
+                                                        est_ptpln,
+                                                        criteria=icp_criteria)
 
             # visualize_reg(sub, src, deepcopy(sub.transform(result2.transformation)))
             results.append(result2)
@@ -891,10 +835,6 @@ class ToolSubstitution(object):
         # self.segment_tool_nonrigid()
         # self.show_sub_grip_point()
         # return self.get_random_contact_pnt()
-
-
-
-
 if __name__ == '__main__':
     gp = GeneratePointcloud()
     n = 8000
@@ -906,8 +846,8 @@ if __name__ == '__main__':
     # pnts1 = gp.load_pointcloud("../../tool_files/rake.ply", get_segments=True)
     #pnts1 = gp.load_pointcloud("../../tool_files/point_clouds/b_wildo_bowl.ply", get_segments=False)
     #pnts2 = gp.load_pointcloud("../../tool_files/point_clouds/a_bowl.ply", get_segments=False)
-    pnts1 = gp.load_pointcloud("../../../meiying_crow_tool/pointcloud/tools/saw.ply", gen_segments=True)
-    pnts2 = gp.load_pointcloud("../../../meiying_crow_tool/pointcloud/tools/butcher_knife.ply", gen_segments=True)
+    pnts1 = gp.load_pointcloud("../../../meiying_crow_tool/pointcloud/tools/red_mallet.ply", gen_segments=True)
+    pnts2 = gp.load_pointcloud("../../../meiying_crow_tool/pointcloud/tools/red_brush.ply", gen_segments=True)
 
     #pnts1 = np.random.uniform(0, 1, size=(n, 3))
     #pnts2 = np.random.uniform(1.4, 2, size=(n, 3))
@@ -926,7 +866,7 @@ if __name__ == '__main__':
     # src = sub
     # sub = shrink_pc(sub)
 
-    cntct_pnt = src.get_pc_bb_axis_frame_centered().argmax(axis=0)[0]
+    cntct_pnt = src.get_pc_bb_axis_frame_centered().argmin(axis=0)[0]
     src.contact_pnt_idx = gen_contact_surface(src.pnts, cntct_pnt)
 
 
@@ -942,7 +882,7 @@ if __name__ == '__main__':
     # visualize(sub.pnts, sub.get_pnt(cntct_pnt2), segments=sub.segments)
     # sub = ToolPointCloud(np.vstack([pnts2.T, sub_seg]).T)
 
-    ts = ToolSubstitution(src, sub, voxel_size=0.0025, visualize=True)
+    ts = ToolSubstitution(src, sub, voxel_size=0.005, visualize=True)
     T, cp = ts.main()
 
     src_pcd = o3d.geometry.PointCloud()

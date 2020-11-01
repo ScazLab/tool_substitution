@@ -2,6 +2,8 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 
+from copy import deepcopy
+
 from scipy.spatial.transform import Rotation as Rot
 from mpl_toolkits.mplot3d import Axes3D, art3d
 from sklearn.metrics.pairwise import cosine_similarity
@@ -370,6 +372,68 @@ def visualize_vectors(vecs):
     ax.quiver(X, Y, Z, U, V, W)
 
     plt.show()
+
+
+def visualize_tool(pcd, cp_idx=None, segment=None, name="Tool"):
+
+    p = deepcopy(pcd)
+    p.paint_uniform_color([0, 0, 1]) # Blue result
+
+    colors = np.asarray(p.colors)
+    if not segment is None:
+        segment = [int(s) for s in segment]
+    seg_id, count = np.unique(segment, return_counts=True)
+
+    print "SEGMENT COUNTS: ", count
+
+    if not segment is None:
+        for i in seg_id:
+            colors[segment==i, :] = np.random.uniform(size=(3))
+
+
+    if not cp_idx is None:
+        colors[cp_idx, : ] = np.array([1,0,0])
+    print colors
+    p.colors = o3d.utility.Vector3dVector(colors)
+    o3d.visualization.draw_geometries([p], name)
+
+def visualize_multiple_cps(pcd, orig_cp_idx, cp_idx_list, name="Multiple cps"):
+    p = deepcopy(pcd)
+    p.paint_uniform_color([0, 0, 1]) # Blue result
+
+    colors = np.asarray(p.colors)
+    colors[orig_cp_idx, :] = np.array([1, 0, 0])
+ 
+
+    for idx in cp_idx_list:
+        colors[idx, :] = np.random.uniform(size=(1,3))
+
+    p.colors = o3d.utility.Vector3dVector(colors)
+    o3d.visualization.draw_geometries([p], name)
+
+def visualize_reg(src, target, result, result_cp_idx=None, target_cp_idx=None, name="Result"):
+
+    s = deepcopy(src)
+    t = deepcopy(target)
+    r = deepcopy(result)
+
+    s.paint_uniform_color([1, 0, 0])    # Red src
+    t.paint_uniform_color([0, 1, 0]) # Green target
+    r.paint_uniform_color([0, 0, 1]) # Blue result
+
+    if not result_cp_idx is None:
+        colors = np.asarray(r.colors)
+        colors[result_cp_idx, :] = np.array([.5,.5,0])
+        r.colors = o3d.utility.Vector3dVector(colors)
+
+    if not target_cp_idx is None:
+        colors = np.asarray(t.colors)
+        colors[target_cp_idx, :] = np.array([.9,.1,0])
+        t.colors = o3d.utility.Vector3dVector(colors)
+
+
+    o3d.visualization.draw_geometries([s, t, r], name)
+
 
 
 
