@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 import os
+import copy
+import util
 import math
 import numpy as np
 import random
@@ -11,16 +13,41 @@ import stl
 
 from matplotlib import pyplot as plt
 from mpl_toolkits import mplot3d
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, AgglomerativeClustering, AffinityPropagation, SpectralClustering
+from sklearn.neighbors import kneighbors_graph
 
 #from plyfile import PlyData, PlyElement
 
 from get_target_tool_pose import get_T_from_R_p
 
 
-PLY_DIR_PATH = "./tool_files/data_demo_segmented_numbered/"
-TOOL_DIR     = "../../tool_files/point_clouds/"
+TOOL_DIR  = "../../../meiying_crow_tool/pointcloud/tools"
 
+
+
+def color_tool(pcd, cp_idx=None, segment=None):
+
+    p = copy.deepcopy(pcd)
+    p.paint_uniform_color([0, 0, 1]) # Blue result
+
+    colors = np.asarray(p.colors)
+    if not segment is None:
+        segment = [int(s) for s in segment]
+    seg_id, count = np.unique(segment, return_counts=True)
+
+    print "SEGMENT COUNTS: ", count
+
+    if not segment is None:
+        for i in seg_id:
+            colors[segment==i, :] = np.random.uniform(size=(3))
+
+
+    if not cp_idx is None:
+        colors[cp_idx, : ] = np.array([1,0,0])
+    print colors
+    p.colors = o3d.utility.Vector3dVector(colors)
+
+    return p
 
 class Mesh(object):
 
@@ -173,12 +200,21 @@ class GeneratePointcloud(object):
         """
         print "Generating PC segments..."
         pnts = np.asarray(pcd.points)
-        kmeans = KMeans(n_clusters=2).fit(pnts)
+        # kmeans = KMeans(n_clusters=2).fit(pnts)
+        # connectivity = kneighbors_graph(pnts, n_neighbors=3, include_self=False, p=1)
+        # kmeans  = AgglomerativeClustering(n_clusters=2, linkage="ward", connectivity=connectivity ).fit(pnts)
+        kmeans = SpectralClustering(2, eigen_solver='arpack', assign_labels='kmeans', affinity='nearest_neighbors', n_init=20, degree=10).fit(pnts)
 
-        return np.vstack([pnts.T, kmeans.labels_]).T
+        # kmeans  = AgglomerativeClustering(n_clusters=2, linkage="average", affinity='manhattan', ).fit(pnts)
+        #kmeans  = AgglomerativeClustering(n_clusters=2, linkage="average", affinity='l2', ).fit(pnts)
+
+        
+        labels = [int(l) for l in kmeans.labels_]
+
+        return np.vstack([pnts.T, labels]).T
 
 
-    def load_pointcloud(self, fn, n=None, gen_segments=False):
+    def load_pointcloud(self, fn, n=10000, gen_segments=False):
         """
         Load pointcloud from file.
 
@@ -190,8 +226,10 @@ class GeneratePointcloud(object):
 
         """
         print "Loading {}...".format(fn)
-        pcd = o3d.io.read_point_cloud(fn)
+        mesh = o3d.io.read_triangle_mesh(fn)
+        pcd = mesh.sample_points_uniformly(n)
         pnts = np.asarray(pcd.points)
+        print "tool shape: ", pnts.shape
 
         if gen_segments:
             pnts = self._gen_segmented_pc(pcd)
@@ -241,12 +279,65 @@ class GeneratePointcloud(object):
     def gen_rectangle(self, n):
         return np.random.uniform(size=(n, 3))
 
+    def test_tool_segmentation(self, obj=None):
+        if not obj is None:
+            tool_path = os.path.join(TOOL_DIR, "{}.ply".format(obj))
+        else:
+            fs = os.listdir(TOOL_DIR)
+            tool_path = os.path.join(TOOL_DIR, "{}".format(np.random.choice(fs)))
+
+        pnts = self.load_pointcloud(fn=tool_path, n=10000, gen_segments=True)
+        pcd = util.np_to_o3d(pnts[:, :3])
+
+        #return pcd
+        util.visualize_tool(pcd, segment=pnts[:, 3])
+        return color_tool(pcd, segment=pnts[:,3])
+
+
+    def test_all_tool_segmentations(self):
+        tools = os.listdir(TOOL_DIR)
+        pcds = []
+        trans = np.array([.0, .3, 0.])
+        for i, t in enumerate(tools):
+            print "t"
+            pcd = self.test_tool_segmentation(t)
+            pcd.translate(trans * i)
+            pcds.append(pcd)
+
+        o3d.visualization.draw_geometries(pcds, "Segmentations")
+
+
+
+        # eps = .02
+        # for e in range(1000):
+        #     eps += .000051
+        #     labels = np.array( pcd.cluster_dbscan(eps=eps, min_points=800))
+        #     max_label = labels.max()
+        #     colors = plt.get_cmap("tab20")(labels / (max_label if max_label > 0 else 1))
+        #     print "eps: ", eps
+        #     print("point cloud has {} clusters".format(max_label + 1))
+        #     colors[labels < 0] = 0
+        #     pcd.colors = o3d.utility.Vector3dVector(colors[:, :3])
+        #     if max_label +1 > 1:
+        #         o3d.visualization.draw_geometries([pcd])
+
 
 
 
 
 if __name__ == '__main__':
-    pass
+    gp = GeneratePointcloud()
+    # gp.test_all_tool_segmentations()
+    gp.test_tool_segmentation("xylo_stick")
+    gp.test_tool_segmentation("purple_spatula")
+
+    gp.test_tool_segmentation("butcher_knife")
+
+    gp.test_tool_segmentation("long_blue_spatula")
+    # gp.test_tool_segmentation("frying_pan")
+
+    # gp.test_tool_segmentation("red_mallet")
+    # gp.test_tool_segmentation("gavel")
     # guitar_mesh = mesh.Mesh.from_file('./tool_files/guitar.stl'
     # tools_mesh = mesh.Mesh.from_file('./tool_files/tools.stl')
     #tools_mesh = Mesh('./tool_files/tools.stl')
