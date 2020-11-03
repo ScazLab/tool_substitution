@@ -710,7 +710,7 @@ class ToolSubstitution(object):
         T_translate = get_T_from_R_p(p=(src_mean_cp-sub_mean_cp))
         final_trans = np.matmul(T_translate, final_trans)
 
-        return final_trans, self.sub_tool.get_unnormalized_pc()[sub_cp_idx,:]
+        return final_trans, sub_cp_idx
 
 
 
