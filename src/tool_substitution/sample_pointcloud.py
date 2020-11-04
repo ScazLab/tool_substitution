@@ -179,12 +179,12 @@ class GeneratePointcloud(object):
         """
         pnts = np.asarray(pcd.points)
         # Determine all segments (each is (1x3) RGB ndarray)
-        segments = np.unique(np.asarray(pcd.colors), axis=0).tolist()
+        segments = np.unique(np.rint(np.asarray(pcd.colors)), axis=0).tolist()
 
         # Convert RGB segments to ints
         segment_array = np.apply_along_axis(lambda c: segments.index(c.tolist()),
                                             axis=1,
-                                            arr=np.asarray(pcd.colors))
+                                            arr=np.asarray(np.rint(pcd.colors)))
 
         return np.vstack([pnts.T, segment_array]).T
 

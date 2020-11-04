@@ -113,6 +113,8 @@ class ToolPointCloud(object):
         idx = np.where(self.segments == segment)[0]
         return self.pnts[idx, :]
 
+    def get_number_of_segments(self):
+        return len(set(self.segments.tolist()))
 
     def get_action_segment(self):
         """
