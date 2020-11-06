@@ -28,7 +28,8 @@ def preprocess_point_cloud(pcd, voxel_size, norm_fn=None):
     if norm_fn is None:
 
         pcd_down.estimate_normals(
-            o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=50))
+            o3d.geometry.KDTreeSearchParamHybrid(radius=0.01, max_nn=5))
+            #o3d.geometry.KDTreeSearchParamHybrid(radius=radius_normal, max_nn=50))
     else:
         pcd_down.normals = o3d.io.read_point_cloud(norm_fn)
 

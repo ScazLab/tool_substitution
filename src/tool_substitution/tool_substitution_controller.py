@@ -2,6 +2,7 @@
 import numpy as np
 from copy import deepcopy
 from numpy.linalg import norm
+import random
 
 from itertools import permutations
 
@@ -38,6 +39,18 @@ def gen_contact_surface(pc, pnt_idx):
 
     return i
 
+def get_np_pc_distance(pc1, pc2):
+    pc1_o3d = o3d.geometry.PointCloud()
+    pc1_o3d.points = o3d.utility.Vector3dVector(pc1)
+    
+    pc2_o3d = o3d.geometry.PointCloud()
+    pc2_o3d.points = o3d.utility.Vector3dVector(pc2)
+    
+    return get_o3d_pc_distance(pc1_o3d, pc2_o3d)
+    
+def get_o3d_pc_distance(pc1, pc2):
+    distance = pc1.compute_point_cloud_distance(pc2)
+    return np.average(distance)    
 
 class ToolSubstitution(object):
     """
@@ -55,6 +68,10 @@ class ToolSubstitution(object):
         # Open3d pointcloud of src and sub tool.
         self.src_pcd = self._np_to_o3d(np.asarray(self.src_tool.pnts))
         self.sub_pcd = self._np_to_o3d(np.asarray(self.sub_tool.pnts))
+        
+        self.src_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.01, max_nn=5))
+        self.sub_pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.01, max_nn=5))
+        
         # Same as above but we will apply all transformations to these
         self.T_src_pcd = deepcopy(self.src_pcd)
         self.T_sub_pcd = deepcopy(self.sub_pcd)
@@ -128,7 +145,8 @@ class ToolSubstitution(object):
 
 
         results = []
-
+        distances = []
+        
         # Apply icp n_iter times and get best result
         for i in range(n_iter):
             result1 = RANSAC(sub, src, sub_fpfh, src_fpfh,
@@ -146,10 +164,16 @@ class ToolSubstitution(object):
 
             # visualize_reg(sub, src, deepcopy(sub.transform(result2.transformation)))
             results.append(result2)
-            print "ICP FITNESS: ", result2.fitness 
-            if result2.fitness == 1.0: break # 1.0 is best possible score.
+            distance = get_o3d_pc_distance(src, sub)
+            distances.append(distance)
+            #print "ICP FITNESS: ", result2.fitness
+            print "Distance: ", distance
+            #if result2.fitness == 1.0: break # 1.0 is best possible score.
 
-        return max(results, key=lambda i:i.fitness)
+        index_min = np.argmin(distances)
+        
+        #return max(results, key=lambda i:i.fitness)
+        return results[index_min]
 
     def _get_sub_pnts(self, get_segments=True):
         """
@@ -209,16 +233,34 @@ class ToolSubstitution(object):
             T = get_T_from_R_p(R=R)
             rot_sub_pcd = deepcopy(sub_pcd)
             rot_sub_pcd.transform(T)
-            dist = o3d.registration.evaluate_registration(rot_sub_pcd,
-                                                          self.T_src_pcd,
-                                                          self.correspondence_thresh)
-            score = (T, rot_sub_pcd, dist.fitness)
+            
+            # use fitness
+            #dist = o3d.registration.evaluate_registration(rot_sub_pcd,
+                                                          #self.T_src_pcd,
+                                                          #self.correspondence_thresh)
+            #score = (T, rot_sub_pcd, dist.fitness)
+            
+            # use distance
+            distance = get_o3d_pc_distance(self.T_src_pcd, rot_sub_pcd)
+            print "R"
+            print R
+            print "distance"
+            print distance
+            #o3d.visualization.draw_geometries([self.T_src_pcd, rot_sub_pcd], "aligning pikachu")
+            score = (T, rot_sub_pcd, distance)
+            
             print "ALIGNMENT SCORE: ", score[2]
             #visualize_reg(sub_pcd, self.T_src_pcd, rot_sub_pcd)
 
             scores.append(score)
-
-        T, rot_sub, fit =  max(scores, key=lambda s:s[2])
+        
+        # use fitness
+        #T, rot_sub, fit = max(scores, key=lambda s:s[2])
+        
+        # use distance
+        T, rot_sub, fit = min(scores, key=lambda s:s[2])
+        #o3d.visualization.draw_geometries([self.T_src_pcd, rot_sub], "aligning pikachu")       
+        
         #o3d.visualization.draw_geometries([rot_sub, self.T_src_pcd], "Best orientation (score: {})".format(fit))
         return T, fit
 
@@ -262,6 +304,35 @@ class ToolSubstitution(object):
 
         return pntcloud[i,:], i
 
+    def _rotate_np_with_segments(self, np_with_segments, p):
+        # np_with_segments: n * 4
+        
+        R = []
+        for index in list(p):
+            if index == 0:
+                R.append([1., 0., 0.])
+            elif index == 1:
+                R.append([0., 1., 0.])
+            elif index == 2:
+                R.append([0., 0., 1.])
+        
+        R = np.array(R).T
+        
+        segments = np_with_segments[:, -1]
+        
+        pnts = np_with_segments[:, :-1].T # 3 by n
+        
+        pnts = np.matmul(R, pnts).T # n by 3
+        
+        pnts = np.hstack((pnts, np.array([segments]).T))
+        
+        #print "R"
+        #print R
+        T = np.vstack((R, np.array([[0., 0., 0.]])))
+        T = np.hstack((T, np.array([[0., 0., 0., 1.]]).T))
+        
+        return T, pnts
+
     def _align_pnts(self):
         """
         Scale sub_pc to and then detemine most similar orientation to src_pc
@@ -277,30 +348,87 @@ class ToolSubstitution(object):
         scores = []
         # Ger perms of all indx
         # _, scale_f = self.sub_tool.scale_pnts_to_target(self.scaled_src_pc)
-        src_tool_norms = ToolPointCloud(self._get_src_pnts()).bb.norms
-        sub_tool_norms = ToolPointCloud(self._get_sub_pnts()).bb.norms
+        #src_tool_norms = ToolPointCloud(self._get_src_pnts()).bb.norms
+        #sub_tool_norms = ToolPointCloud(self._get_sub_pnts()).bb.norms
+        
+        print "****************************************src normalized axis"
+        src_bb = ToolPointCloud(self._get_src_pnts()).bb
+        src_bb._calculate_axis()
+        print "axis is ", src_bb.get_normalized_axis()
+        print "norm is ", src_bb.norms
+        print "****************************************sub normalized axis"
+        sub_bb = ToolPointCloud(self._get_sub_pnts()).bb
+        sub_bb._calculate_axis()
+        print "axis is ", sub_bb.get_normalized_axis() 
+        print "norm is ", sub_bb.norms
+        
+        print "!!!!!!!!!!!!!!!self._get_src_pnts()"
+        print self._get_src_pnts()
 
-
-        for p in permutations([0,1,2]):
+        #for p in permutations([0, 1, 2]):
+        for p in [[0, 1, 2], [1, 0, 2], [2, 1, 0]]:
+            print "........................................................."
+            print "p"
+            print p
+            T, sub_pnts = self._rotate_np_with_segments(self._get_sub_pnts(), p)
+            src_tool_norm = src_bb.norms
+            sub_tool_norm = deepcopy(sub_bb.norms)[list(p)]
+            print "src_tool_norm: ", src_tool_norm
+            print "sub_tool_norm: ", sub_tool_norm
+            #sub_tool_norms = sub_tool_norms[list(p)]
             scaled_sub_pcd = deepcopy(self.T_sub_pcd)
+            scaled_sub_pcd.transform(T)
             # permed_scale_f = scale_f[list(p)]
-            permed_scale_f = (src_tool_norms / sub_tool_norms)[list(p)]
+            #permed_scale_f = (src_tool_norms / sub_tool_norms)[list(p)]
+            permed_scale_f = src_tool_norm / sub_tool_norm
+            #print "src_tool_norms"
+            #print src_tool_norms
+            #print "sub_tool_norms"
+            #print sub_tool_norms
+            print "src_tool_norm / sub_tool_norm"
+            print src_tool_norm / sub_tool_norm
             T_sub_action_part_scale = get_scaling_T(scale=permed_scale_f)
             # T_sub_action_part_scale = get_T_from_R_p()
             # scaled_sub_pcd = self.T_src_pcd.transform(T_sub_action_part_scale)
             scaled_sub_pcd.transform(T_sub_action_part_scale)
 
-
             T_rot, score = self._calc_best_orientation(scaled_sub_pcd,
                                                        [R1, R2, R3, R4])
-
+            
+            #copy_scaled_sub_pcd = deepcopy(self.T_sub_pcd)
+            #copy_scaled_sub_pcd.transform(np.matmul(T_rot, T))
+            #copy_scaled_sub_pcd.transform(T_sub_action_part_scale)
+            #o3d.visualization.draw_geometries([scaled_sub_pcd, copy_scaled_sub_pcd], "scaled sub pcd")
+            
+            T_rot = np.matmul(T_rot, T)
+            #T_sub_action_part_scale = np.matmul(T_sub_action_part_scale, T)
             scores.append((T_rot, T_sub_action_part_scale, score))
+            
+            copy_scaled_sub_pcd = deepcopy(self.T_sub_pcd)
+            copy_scaled_sub_pcd.transform(T_rot)
+            copy_scaled_sub_pcd.transform(T_sub_action_part_scale)
+            o3d.visualization.draw_geometries([scaled_sub_pcd, copy_scaled_sub_pcd], "scaled sub pcd")            
+            
+            print "saved is: T_rot"
+            print T_rot
+            print "saved is: T_sub_action_part_scale"
+            print T_sub_action_part_scale
 
-        T_rot, T_sub_action_part_scale, fit =  max(scores, key=lambda s: s[2])
+        # use fitness
+        #T_rot, T_sub_action_part_scale, fit =  max(scores, key=lambda s: s[2])
+        
+        # use distance
+        T_rot, T_sub_action_part_scale, fit = min(scores, key=lambda s: s[2])
 
-        self.T_sub_pcd.transform(T_sub_action_part_scale)
+        print "selected is T_rot"
+        print T_rot
+        print "selected is T_sub_action_part_scale"
+        print T_sub_action_part_scale
+
         self.T_sub_pcd.transform(T_rot)
-
+        o3d.visualization.draw_geometries([self.T_sub_pcd, self.T_src_pcd], "after rotate")
+        self.T_sub_pcd.transform(T_sub_action_part_scale)
+        o3d.visualization.draw_geometries([self.T_sub_pcd, self.T_src_pcd], "after scaling")
 
         self.scale_Ts.append(T_sub_action_part_scale) # Append scaling matrix
 
@@ -472,10 +600,43 @@ class ToolSubstitution(object):
 
         return icp_trans, icp_fit, source, target
 
+    #def icp_alignment_select_size(self, source, target, correspondence_thresh, n_iter=10, name="ICP"):
+        #best_icp_trans = np.identity(4)
+        #best_icp_fitness = 0.
+        ##best_icp_distance = 100.
+        #best_source = deepcopy(source)
+        #best_target = deepcopy(target)
+        #best_size = 0.
+        
+        #size = 0.0025
+        #for i in range(5):
+            #size += 0.0025
+            #source_copy = deepcopy(source)
+            #target_copy = deepcopy(target)
+            #icp_trans, icp_fit, updated_source, updated_target = self.icp_alignment(source_copy,
+                                                                                    #target_copy,
+                                                                                    #correspondence_thresh,
+                                                                                    #n_iter=n_iter,
+                                                                                    #name=name,
+                                                                                    #size=size)
+            ##distance = self._get_registration_evaluation(source_copy, target_copy, icp_trans)
+            ##if distance < best_icp_distance:
+            #if icp_fit > best_icp_fitness:
+                ##best_icp_distance = distance
+                #best_icp_trans = deepcopy(icp_trans)
+                #best_icp_fitness = icp_fit
+                #best_source = deepcopy(updated_source)
+                #best_target = deepcopy(updated_target)
+                #best_size = size   
+        
+        #print "[tool_substitution_controller][icp_alignment_select_size] size selected: ", best_size
+        
+        #return best_icp_trans, best_icp_fitness, best_source, best_target
+    
     def icp_alignment_select_size(self, source, target, correspondence_thresh, n_iter=10, name="ICP"):
         best_icp_trans = np.identity(4)
         best_icp_fitness = 0.
-        #best_icp_distance = 100.
+        best_icp_distance = 100.
         best_source = deepcopy(source)
         best_target = deepcopy(target)
         best_size = 0.
@@ -491,10 +652,9 @@ class ToolSubstitution(object):
                                                                                     n_iter=n_iter,
                                                                                     name=name,
                                                                                     size=size)
-            #distance = self._get_registration_evaluation(source_copy, target_copy, icp_trans)
-            #if distance < best_icp_distance:
-            if icp_fit > best_icp_fitness:
-                #best_icp_distance = distance
+            distance = get_o3d_pc_distance(updated_target, updated_source)
+            if distance < best_icp_distance:
+                best_icp_distance = distance
                 best_icp_trans = deepcopy(icp_trans)
                 best_icp_fitness = icp_fit
                 best_source = deepcopy(updated_source)
@@ -503,8 +663,7 @@ class ToolSubstitution(object):
         
         print "[tool_substitution_controller][icp_alignment_select_size] size selected: ", best_size
         
-        return best_icp_trans, best_icp_fitness, best_source, best_target
-        
+        return best_icp_trans, best_icp_fitness, best_source, best_target, best_icp_distance   
 
     def refine_registration(self, init_trans, source, target, voxel_size, name="Reg result"):
         pose_graph = o3d.registration.PoseGraph()
@@ -571,12 +730,50 @@ class ToolSubstitution(object):
         if self.visualize:
             print "INV SRC REG"
             visualize_reg(source, target, aligned_source,
-                name=name)
+                name=name)      
 
         return pcds[src_idx], aligned_source, final_T, fit
 
+    #def refine_registration_select_size(self, init_trans, source, target, name="Reg result"):
+        #best_pcds = deepcopy(source)
+        #best_aligned_source = deepcopy(source)
+        #best_final_T = deepcopy(init_trans)
+        #best_fit = 0.
+        #best_size = 0.
+        
+        #size = 0.0025
+        #for i in range(5):
+            #size += 0.0025
+            #source_copy = deepcopy(source)
+            #target_copy = deepcopy(target)
+            #pcds, aligned_source, final_T, fit = self.refine_registration(init_trans,
+                                                                          #source_copy,
+                                                                          #target_copy,
+                                                                          #size,
+                                                                          #name=name)
+            #if fit > best_fit:
+                #best_pcds = deepcopy(pcds)
+                #best_aligned_source = deepcopy(aligned_source)
+                #best_final_T = deepcopy(final_T)
+                #best_fit = fit
+                #best_size = size   
+        
+        #print "[tool_substitution_controller][refine_registration_select_size] size selected: ", best_size
+        
+        #target = deepcopy(target)
+        #target.paint_uniform_color(np.array([1., 0., 0.]))
+        #aligned_source = deepcopy(best_aligned_source)
+        #aligned_source.paint_uniform_color(np.array([0., 1., 0.]))
+        #source = deepcopy(source)
+        #source.paint_uniform_color(np.array([0., 1., 0.]))
+        #o3d.visualization.draw_geometries([target, source], "initial alignment")
+        #o3d.visualization.draw_geometries([target, best_aligned_source], "aliiiiiiiiiiigning!!!, best_fit: " + str(best_fit)) # to delete  
+        
+        #return best_pcds, best_aligned_source, best_final_T, best_fit
+        
     def refine_registration_select_size(self, init_trans, source, target, name="Reg result"):
         best_pcds = deepcopy(source)
+        best_icp_distance = 100.
         best_aligned_source = deepcopy(source)
         best_final_T = deepcopy(init_trans)
         best_fit = 0.
@@ -592,16 +789,28 @@ class ToolSubstitution(object):
                                                                           target_copy,
                                                                           size,
                                                                           name=name)
-            if fit > best_fit:
+            distance = get_o3d_pc_distance(target, aligned_source)
+            if distance < best_icp_distance:
                 best_pcds = deepcopy(pcds)
                 best_aligned_source = deepcopy(aligned_source)
                 best_final_T = deepcopy(final_T)
                 best_fit = fit
-                best_size = size   
+                best_size = size 
+                best_icp_distance = distance
         
         print "[tool_substitution_controller][refine_registration_select_size] size selected: ", best_size
         
-        return best_pcds, best_aligned_source, best_final_T, best_fit
+        #TODO: to delete
+        #target = deepcopy(target)
+        #target.paint_uniform_color(np.array([1., 0., 0.]))
+        #aligned_source = deepcopy(best_aligned_source)
+        #aligned_source.paint_uniform_color(np.array([0., 1., 0.]))
+        #source = deepcopy(source)
+        #source.paint_uniform_color(np.array([0., 1., 0.]))
+        #o3d.visualization.draw_geometries([target, source], "initial alignment")
+        #o3d.visualization.draw_geometries([target, best_aligned_source], "aliiiiiiiiiiigning!!!, best_fit: " + str(best_fit)) # to delete  
+        
+        return best_pcds, best_aligned_source, best_final_T, best_fit, best_icp_distance 
         
     def get_T_cp(self, n_iter=10):
         """
@@ -613,41 +822,85 @@ class ToolSubstitution(object):
         self._scale_pcs()
         # Find best initial alignment via rotations over these axes.
         align_fit = self._align_pnts()
+        o3d.visualization.draw_geometries([self.T_src_pcd, self.T_sub_pcd], "align pcs")
+        
+        raise Exception("stop")
+        
         # Get the points in the action segments of both tools
         src_action_pnts, sub_action_pnts = self.get_tool_action_parts()
+        initial_distance = get_np_pc_distance(src_action_pnts, sub_action_pnts)
+
+        source_action_pc = o3d.geometry.PointCloud()
+        source_action_pc.points = o3d.utility.Vector3dVector(src_action_pnts)
+        source_action_pc.paint_uniform_color(np.array([0., 1., 0.]))
+        #o3d.visualization.draw_geometries([source_action_pc], "source action part")        
+        
+        sub_action_pc = o3d.geometry.PointCloud()
+        sub_action_pc.points = o3d.utility.Vector3dVector(sub_action_pnts)
+        sub_action_pc.paint_uniform_color(np.array([1., 0., 0.]))
+        #o3d.visualization.draw_geometries([sub_action_pc], "sub action part")
+        
+        o3d.visualization.draw_geometries([source_action_pc, sub_action_pc], "action parts chosen")        
 
         #icp_trans, fit, sub_action_pcd, src_action_pcd = self.icp_alignment_select_size(sub_action_pnts,
                                                                                         #src_action_pnts,
                                                                                         #self.correspondence_thresh,
                                                                                         #n_iter)
-        icp_trans, fit, sub_action_pcd, src_action_pcd = self.icp_alignment(sub_action_pnts,
-                                                                            src_action_pnts,
-                                                                            self.correspondence_thresh,
-                                                                            n_iter)                                                                                        
-       
+        icp_trans, fit, sub_action_pcd, src_action_pcd, distance = self.icp_alignment_select_size(sub_action_pnts,
+                                                                                                  src_action_pnts,
+                                                                                                  self.correspondence_thresh,
+                                                                                                  n_iter)
+        #icp_trans, fit, sub_action_pcd, src_action_pcd = self.icp_alignment(sub_action_pnts,
+                                                                            #src_action_pnts,
+                                                                            #self.correspondence_thresh,
+                                                                            #n_iter)                                                                                        
 
-        print "ORGINAL ALIGN FITNESS: ", align_fit
-        print "INIT ICP FITNESS:      ", fit
-        fit_ratio = fit / align_fit
 
-        if fit_ratio > self.fit_ratio_thresh:
-            print "USING INIT. ICP RESULTS.."
-            T_align = icp_trans
-        else:
-            print "SKIPPING  INIT. ICP RESULTS, USING INIT. ALIGNMENT."
-            T_align = get_T_from_R_p()
+        #print "ORGINAL ALIGN FITNESS: ", align_fit
+        #print "INIT ICP FITNESS:      ", fit
+        #fit_ratio = fit / align_fit
 
+        #if fit_ratio > self.fit_ratio_thresh:
+            #print "USING INIT. ICP RESULTS.."
+            #T_align = icp_trans
+        #else:
+            #print "SKIPPING  INIT. ICP RESULTS, USING INIT. ALIGNMENT."
+            #T_align = get_T_from_R_p()
+        
+        T_align = icp_trans
+        initial_T_align = get_T_from_R_p()
+        if initial_distance < distance:
+            T_align = initial_T_align
+        
         print "Refining registration..."
         # Refine initial icp alignment.
-        #_, aligned_sub_pcd, T_align,_ = self.refine_registration_select_size(T_align,
+        _, aligned_sub_pcd, T_align, best_fit, best_distance = self.refine_registration_select_size(T_align,
+                                                                                                    sub_action_pcd,
+                                                                                                    src_action_pcd,
+                                                                                                    name="Aligned action parts")        
+        
+        #_, aligned_sub_pcd, T_align, best_fit = self.refine_registration_select_size(T_align,
                                                                              #sub_action_pcd,
                                                                              #src_action_pcd,
                                                                              #name="Aligned action parts")
-        _, aligned_sub_pcd, T_align,_ = self.refine_registration(T_align,
-                                                                 sub_action_pcd,
-                                                                 src_action_pcd,
-                                                                 self.voxel_size,
-                                                                 name="Aligned action parts")
+        #_, aligned_sub_pcd, T_align, fit = self.refine_registration(T_align,
+                                                                 #sub_action_pcd,
+                                                                 #src_action_pcd,
+                                                                 #self.voxel_size,
+                                                                 #name="Aligned action parts")
+
+        #print "????????? fit score is: ", best_fit
+        print "######################################################################"
+        if initial_distance < best_distance:
+            print "use original alignement"
+            T_align = initial_T_align
+        else:
+            print "use new alignment"
+        
+        print "\tinitial_average_distance: ", initial_distance
+        print "\talignment average distance: ", best_distance
+        print "######################################################################"
+        #raise Exception("stop")
 
         if self.visualize:
             print "TEST ALIGNMENT"
@@ -748,36 +1001,42 @@ class ToolSubstitution(object):
         new_vox_size = self.voxel_size
         new_corr_thresh = self.correspondence_thresh
 
-        icp_T, icp_fit, _, _= self.icp_alignment(original_sub_pnts,
-                                                 descaled_sub_pnts,
-                                                 new_corr_thresh,
-                                                 n_iter=n_iter,
-                                                 )        
+        #icp_T, icp_fit, _, _= self.icp_alignment(original_sub_pnts,
+                                                 #descaled_sub_pnts,
+                                                 #new_corr_thresh,
+                                                 #n_iter=n_iter,
+                                                 #)        
 
-        #icp_T, icp_fit, _, _= self.icp_alignment_select_size(original_sub_pnts,
-                                                             #descaled_sub_pnts,
-                                                             #new_corr_thresh,
-                                                             #n_iter=n_iter,
-                                                             #)
+        icp_T, icp_fit, _, _, icp_distance = self.icp_alignment_select_size(original_sub_pnts,
+                                                                            descaled_sub_pnts,
+                                                                            new_corr_thresh,
+                                                                            n_iter=n_iter,
+                                                                            )
 
-        aligned_sub_pcd,_, refine_T, refine_fit = self.refine_registration(icp_T,
-                                                                           self.sub_pcd,
-                                                                           # descaled_aligned_sub,
-                                                                           self.T_sub_pcd,
-                                                                           self.voxel_size,
-                                                                           name="Aligning sub tool in init pos to transformed sub tool")
+        #aligned_sub_pcd,_, refine_T, refine_fit = self.refine_registration(icp_T,
+                                                                           #self.sub_pcd,
+                                                                           ## descaled_aligned_sub,
+                                                                           #self.T_sub_pcd,
+                                                                           #self.voxel_size,
+                                                                           #name="Aligning sub tool in init pos to transformed sub tool")
 
-        #aligned_sub_pcd,_, refine_T, refine_fit = self.refine_registration_select_size(icp_T,
-                                                                                       #self.sub_pcd,
-                                                                                       ## descaled_aligned_sub,
-                                                                                       #self.T_sub_pcd,
-                                                                                       #name="Aligning sub tool in init pos to transformed sub tool")
+        aligned_sub_pcd, _, refine_T, refine_fit, refine_distance = self.refine_registration_select_size(icp_T,
+                                                                                                        self.sub_pcd,
+                                                                                                        # descaled_aligned_sub,
+                                                                                                        self.T_sub_pcd,
+                                                                                                        name="Aligning sub tool in init pos to transformed sub tool")
 
 
-        print "ICP fit: ", icp_fit
-        print "Refine fit: ", refine_fit
+        #print "ICP fit: ", icp_fit
+        #print "Refine fit: ", refine_fit
+        
+        print "######################################################################"
+        print "ICP distance: ", icp_distance
+        print "Refine distance: ", refine_distance
+        print "######################################################################"
 
-        final_trans = icp_T if icp_fit > refine_fit else refine_T
+        #final_trans = icp_T if icp_fit > refine_fit else refine_T
+        final_trans = icp_T if icp_distance < refine_distance else refine_T
         # self.T_sub_pcd.transform(final_trans)
 
         # Algin the centroids of contact areas of the tools.

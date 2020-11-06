@@ -252,9 +252,10 @@ class GoalSubstitution(ToolSubstitution):
         self.T_sub_pcd.transform(final_scale_T)
         self.T_sub_pcd.transform(self.temp_src_T)
         print "TEST"
-        visualize_reg(aligned_sub_pcd, self.src_pcd, self.T_sub_pcd,
-                      result_cp_idx=sub_cp_idx,
-                      target_cp_idx=self.src_tool.contact_pnt_idx)
+        if self.visualize:
+            visualize_reg(aligned_sub_pcd, self.src_pcd, self.T_sub_pcd,
+                          result_cp_idx=sub_cp_idx,
+                          target_cp_idx=self.src_tool.contact_pnt_idx)
 
         descaled_sub_pnts = np.asarray(self._get_sub_pnts(get_segments=False))
         original_sub_pnts = np.asarray(self.sub_pcd.points)
@@ -286,16 +287,17 @@ class GoalSubstitution(ToolSubstitution):
                                                self._get_sub_pnts(False))
 
         print "FINAL TEST"
-        visualize_reg(self.sub_pcd,
-                      self.T_sub_pcd,
-                      deepcopy(self.sub_pcd).transform(final_trans),
-                      result_cp_idx=new_sub_cp_idx,
-                      target_cp_idx=sub_cp_idx)
-        visualize_reg(self.sub_pcd,
-                      self.src_pcd,
-                      self.T_sub_pcd,
-                      result_cp_idx=sub_cp_idx,
-                      target_cp_idx=self.src_tool.contact_pnt_idx)
+        if self.visualize:
+            visualize_reg(self.sub_pcd,
+                          self.T_sub_pcd,
+                          deepcopy(self.sub_pcd).transform(final_trans),
+                          result_cp_idx=new_sub_cp_idx,
+                          target_cp_idx=sub_cp_idx)
+            visualize_reg(self.sub_pcd,
+                          self.src_pcd,
+                          self.T_sub_pcd,
+                          result_cp_idx=sub_cp_idx,
+                          target_cp_idx=self.src_tool.contact_pnt_idx)
 
 
 
