@@ -434,8 +434,186 @@ def visualize_reg(src, target, result, result_cp_idx=None, target_cp_idx=None, n
 
     o3d.visualization.draw_geometries([s, t, r], name)
 
+def align_pcd_select_size(pcds):
+    size = 0.0025
+    min_threshold = 10.0
+    #min_threshold = 0.0
+    pcd_aligned = None
+    aligned_set = None
+    min_size = 0.0
+    min_transformations = None
 
+    for i in range(5):
+        size += 0.0025
+        #size = .025
+        pcd_aligned = [copy.deepcopy(pc) for pc in pcds]
+        for pc in pcd_aligned:
+            add_color_normal(pc, paint=False)
+        _, transformations = align_pcds_helper(pcd_aligned, size=size)
+        
+        total_distance = 0.0
+        #fitness_scores = []
+        for i in range(len(pcd_aligned)):
+            if i > 0:
+                # fitness = get_fitness(pcd_aligned[0], pcd_aligned[i], 0.001) # Jake: make need to tune the max_correspondence_distance
+                #fitness = get_fitness(pcd_aligned[0], pcd_aligned[i], .001) # Jake: make need to tune the max_correspondence_distance
 
+                #fitness_scores.append(fitness)
+                total_distance += get_average_distance(pcd_aligned[0], pcd_aligned[i])
+                #total_distance += fitness
+                #o3d.visualization.draw_geometries(pcd_aligned, "combined")
+
+                #fitness = get_fitness(pcd_aligned[0], pcd_aligned[i], 0.005) # Jake: make need to tune the max_correspondence_distance
+                #fitness_scores.append(fitness)
+        
+        distance = 0.0
+        #averaged_fitness_score = 1.0 # default to 1.0 if there is only 1 point cloud
+        if len(pcd_aligned) > 1.0:
+            distance = total_distance / (len(pcd_aligned) - 1.0)
+            #averaged_fitness_score = sum(fitness_scores) / (len(fitness_scores) * 1.0)
+            
+        print "size: ", size, "; distance: ", distance, "weighted: ", size * distance
+        if distance < min_threshold:
+            min_threshold = distance
+            min_size = size
+            min_transformations = transformations
+            aligned_set = pcd_aligned
+
+    print "Chosen size thresh: ", min_size
+    print 
+    
+    return aligned_set, min_transformations, min_threshold
+
+# function from: https://qiita.com/tttamaki/items/648422860869bbccc72d
+def add_color_normal(pcd, paint=False): # in-place coloring and adding normal
+    if paint:
+        pcd.paint_uniform_color(np.random.rand(3))
+    size = np.abs((pcd.get_max_bound() - pcd.get_min_bound())).max() / 30
+    kdt_n = o3d.geometry.KDTreeSearchParamHybrid(radius=size, max_nn=5)
+    pcd.estimate_normals(search_param=kdt_n, fast_normal_computation=False)
+
+# function from: https://qiita.com/tttamaki/items/648422860869bbccc72d
+# this is a multiway registration, or full registration
+# more information can be found: http://www.open3d.org/docs/release/tutorial/Advanced/multiway_registration.html
+# and https://blog.csdn.net/weixin_36219957/article/details/106432869
+def align_pcds_helper(pcds, size):
+    pose_graph = o3d.registration.PoseGraph()
+    accum_pose = np.identity(4)
+    pose_graph.nodes.append(o3d.registration.PoseGraphNode(accum_pose))
+
+    n_pcds = len(pcds)
+    for source_id in range(n_pcds):
+        for target_id in range(source_id + 1, n_pcds):
+            source = pcds[source_id]
+            target = pcds[target_id]
+
+            trans = register(source, target, size)
+            
+            GTG_mat = o3d.registration.get_information_matrix_from_point_clouds(source, target, size, trans)
+
+            if target_id == source_id + 1:
+                accum_pose = np.matmul(trans, accum_pose)
+                pose_graph.nodes.append(o3d.registration.PoseGraphNode(np.linalg.inv(accum_pose)))
+
+            pose_graph.edges.append(o3d.registration.PoseGraphEdge(source_id,
+                                                               target_id,
+                                                               trans,
+                                                               GTG_mat,
+                                                               uncertain=True))
+
+    solver = o3d.registration.GlobalOptimizationLevenbergMarquardt()
+    criteria = o3d.registration.GlobalOptimizationConvergenceCriteria()
+    option = o3d.registration.GlobalOptimizationOption(max_correspondence_distance=size / 10,
+                                                       edge_prune_threshold=size / 10,
+                                                       reference_node=0)
+
+    o3d.registration.global_optimization(pose_graph,
+                                         method=solver,
+                                         criteria=criteria,
+                                         option=option)
+
+    transformations = []
+    for pcd_id in range(n_pcds):
+        trans = pose_graph.nodes[pcd_id].pose
+        transformations.append(trans)
+        pcds[pcd_id].transform(trans)
+
+    # trans: new point = trans * old point
+    return pcds, transformations
+
+# function from: https://qiita.com/tttamaki/items/648422860869bbccc72d
+# it did a pairwise registration
+def register(pcd1, pcd2, size, n_iter=4):
+
+    kdt_n = o3d.geometry.KDTreeSearchParamHybrid(radius=size, max_nn=50)
+    kdt_f = o3d.geometry.KDTreeSearchParamHybrid(radius=size * 10, max_nn=50)
+
+    pcd1_d = pcd1.voxel_down_sample(size)
+    pcd2_d = pcd2.voxel_down_sample(size)
+    pcd1_d.estimate_normals(search_param=kdt_n, fast_normal_computation=False)
+    pcd2_d.estimate_normals(search_param=kdt_n, fast_normal_computation=False)
+
+    pcd1_f = o3d.registration.compute_fpfh_feature(pcd1_d, kdt_f)
+    pcd2_f = o3d.registration.compute_fpfh_feature(pcd2_d, kdt_f)
+
+    checker = [o3d.registration.CorrespondenceCheckerBasedOnEdgeLength(0.9),
+               o3d.registration.CorrespondenceCheckerBasedOnDistance(size * 2)]
+
+    est_ptp = o3d.registration.TransformationEstimationPointToPoint()
+    est_ptpln = o3d.registration.TransformationEstimationPointToPlane()
+
+    criteria = o3d.registration.RANSACConvergenceCriteria(max_iteration=400000, max_validation=500)
+    icp_criteria = o3d.registration.ICPConvergenceCriteria(max_iteration=400)
+    
+    # Perform ICP n_iter times and choose best result.
+    res = []
+    min_distance = 10.
+    chosen_transformation = np.identity(4)
+    for i in range(n_iter):
+        result1 = o3d.registration.registration_ransac_based_on_feature_matching(pcd1_d, pcd2_d,
+                                                                             pcd1_f, pcd2_f,
+                                                                             max_correspondence_distance=size * 2,
+                                                                             estimation_method=est_ptp,
+                                                                             ransac_n=4,
+                                                                             checkers=checker,
+                                                                             criteria=criteria)
+
+        result2 = o3d.registration.registration_icp(pcd1_d, pcd2_d, size, result1.transformation, est_ptpln, criteria=icp_criteria)
+        
+        # using distance
+        distance = get_average_distance(pcd1_d, pcd2_d)
+        if distance < min_distance:
+            chosen_transformation = result2.transformation
+        
+        # using fitness score
+        #res.append(result2)
+
+    # using fitness score
+    #result2 = max(res, key=lambda r: r.fitness)
+    #return result2.transformation
+    
+    # using distance
+    return chosen_transformation
+
+def get_average_distance(pc1, pc2):
+    distance = pc1.compute_point_cloud_distance(pc2)
+    return np.average(distance)
+
+def get_homogenous_transformation_matrix_inverse(T):
+    R, p = get_R_p_from_matrix(T)
+    return get_homogenous_transformation_matrix(R.T, -np.matmul(R.T, p.T).T)
+
+def get_R_p_from_matrix(T):
+    #R = T[0:-1, 0:-1]
+    #p = np.array([T[0:-1, -1]])
+    return T[0:-1, 0:-1], np.array([T[0:-1, -1]])
+
+def get_homogenous_transformation_matrix(R, p):
+    assert(R.shape[0] == R.shape[1])
+    assert(R.shape[0] == p.shape[1])
+    #R = np.r_[R, np.zeros((1, R.shape[0]))]
+    #p = np.r_[p.T, [[1]]]
+    return np.c_[np.r_[R, np.zeros((1, R.shape[0]))], np.r_[p.T, [[1]]]]
 
 if __name__ == '__main__':
     pass

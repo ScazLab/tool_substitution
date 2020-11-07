@@ -111,7 +111,7 @@ class ToolPointCloud(object):
         # assert(segment in np.unique(self.segments))
 
         idx = np.where(self.segments == segment)[0]
-        return self.pnts[idx, :]
+        return self.pnts[idx, :], idx
 
     def get_number_of_segments(self):
         return len(set(self.segments.tolist()))
@@ -143,7 +143,7 @@ class ToolPointCloud(object):
         """
         seg = self.get_segment_from_point(idx)
         pnt = self.get_pnt(idx)
-        seg_pnts = self.get_pnts_in_segment(seg)
+        seg_pnts, _ = self.get_pnts_in_segment(seg)
 
         idx = (seg_pnts[:,None] == pnt).all(2).any(1)
         print("IDX ", idx)
@@ -156,7 +156,7 @@ class ToolPointCloud(object):
         Given a point idx within a particular segment, get the idx
         of the same point in the context of entire pointcloud.
         """
-        seg_pnts = self.get_pnts_in_segment(seg)
+        seg_pnts, _ = self.get_pnts_in_segment(seg)
         seg_pnt = seg_pnts[seg_idx, :]
 
         return (self.pnts[:, None] == seg_pnt).all(2).any(1)
