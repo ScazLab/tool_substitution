@@ -446,7 +446,7 @@ def align_pcd_select_size(pcds):
     for i in range(5):
         size += 0.0025
         #size = .025
-        pcd_aligned = [copy.deepcopy(pc) for pc in pcds]
+        pcd_aligned = [deepcopy(pc) for pc in pcds]
         for pc in pcd_aligned:
             add_color_normal(pc, paint=False)
         _, transformations = align_pcds_helper(pcd_aligned, size=size)
@@ -488,8 +488,8 @@ def align_pcd_select_size(pcds):
 def add_color_normal(pcd, paint=False): # in-place coloring and adding normal
     if paint:
         pcd.paint_uniform_color(np.random.rand(3))
-    size = np.abs((pcd.get_max_bound() - pcd.get_min_bound())).max() / 30
-    kdt_n = o3d.geometry.KDTreeSearchParamHybrid(radius=size, max_nn=5)
+    #size = np.abs((pcd.get_max_bound() - pcd.get_min_bound())).max() / 30
+    kdt_n = o3d.geometry.KDTreeSearchParamHybrid(radius=0.01, max_nn=5)
     pcd.estimate_normals(search_param=kdt_n, fast_normal_computation=False)
 
 # function from: https://qiita.com/tttamaki/items/648422860869bbccc72d
@@ -545,8 +545,8 @@ def align_pcds_helper(pcds, size):
 # it did a pairwise registration
 def register(pcd1, pcd2, size, n_iter=4):
 
-    kdt_n = o3d.geometry.KDTreeSearchParamHybrid(radius=size, max_nn=50)
-    kdt_f = o3d.geometry.KDTreeSearchParamHybrid(radius=size * 10, max_nn=50)
+    kdt_n = o3d.geometry.KDTreeSearchParamHybrid(radius=0.005, max_nn=5)
+    kdt_f = o3d.geometry.KDTreeSearchParamHybrid(radius=0.005, max_nn=5)
 
     pcd1_d = pcd1.voxel_down_sample(size)
     pcd2_d = pcd2.voxel_down_sample(size)
@@ -563,7 +563,7 @@ def register(pcd1, pcd2, size, n_iter=4):
     est_ptpln = o3d.registration.TransformationEstimationPointToPlane()
 
     criteria = o3d.registration.RANSACConvergenceCriteria(max_iteration=400000, max_validation=500)
-    icp_criteria = o3d.registration.ICPConvergenceCriteria(max_iteration=400)
+    icp_criteria = o3d.registration.ICPConvergenceCriteria(max_iteration=1000)
     
     # Perform ICP n_iter times and choose best result.
     res = []
@@ -572,7 +572,8 @@ def register(pcd1, pcd2, size, n_iter=4):
     for i in range(n_iter):
         result1 = o3d.registration.registration_ransac_based_on_feature_matching(pcd1_d, pcd2_d,
                                                                              pcd1_f, pcd2_f,
-                                                                             max_correspondence_distance=size * 2,
+                                                                             #max_correspondence_distance=size * 2,
+                                                                             max_correspondence_distance=0.01,
                                                                              estimation_method=est_ptp,
                                                                              ransac_n=4,
                                                                              checkers=checker,

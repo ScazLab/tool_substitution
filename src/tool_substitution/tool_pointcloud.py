@@ -42,6 +42,10 @@ class ToolPointCloud(object):
 
 
         self.contact_pnt_idx = contact_pnt_idx
+        
+        print "[tool_pointcloud] self.contact_pnt_idx"
+        print self.contact_pnt_idx
+        
         self.bounding_box()
 
     def scale_pnts_to_target(self, target_tpc, keep_proportional=False):
@@ -120,6 +124,7 @@ class ToolPointCloud(object):
         """
         Get the segment of the tool containing the most contact points.
         """
+        print "contact point index"
         print self.contact_pnt_idx
         cp_segments = self.get_segment_from_point(self.contact_pnt_idx)
         print "CP SEGMENTS ", cp_segments

@@ -95,6 +95,9 @@ class ToolSubstitution(object):
         self.temp_src_T = np.identity(4)  # This stores temporary transformations we will later undo.
         self.scale_Ts = [] # Tracks all scalings of sub tool.
 
+        print "[tool_substitution_controller] contact point index"
+        print self.src_tool.contact_pnt_idx
+
         if self.visualize:
             visualize_tool(self.src_pcd, self.src_tool.contact_pnt_idx, 
                            self.src_tool.segments, "Src tool with contact surface")
@@ -288,24 +291,35 @@ class ToolSubstitution(object):
 
         Returns idx of pnts in sub_pnts estimated to be its contact surface.
         """
+ 
+        # Method 1: use the covariance method
+        #if len(src_cps.shape) > 1: # If there are multiple contact points
+            #cov = np.cov(src_cps.T) # Then get the mean and cov from these points
+            #cp_mean = src_cps.mean(axis=0)
+        #else: # If only one contact point...
+            ## Then get more by finding 20 nearest neighbors around it.
+            #tree = KDTree( source )
+            #_, i = tree.query(src_cps, k=20)
+            #est_src_surface =  source [i, :]
 
-        if len(src_cps.shape) > 1: # If there are multiple contact points
-            cov = np.cov(src_cps.T) # Then get the mean and cov from these points
-            cp_mean = src_cps.mean(axis=0)
-        else: # If only one contact point...
-            # Then get more by finding 20 nearest neighbors around it.
-            tree = KDTree( source )
-            _, i = tree.query(src_cps, k=20)
-            est_src_surface =  source [i, :]
+            #cov = np.cov(est_src_surface.T)
+            #cp_mean = src_cps
 
-            cov = np.cov(est_src_surface.T)
-            cp_mean = src_cps
+        #est_sub_cp, _ = self._get_closest_pnt(cp_mean, sub_pnts)
+        ## Get points arounnd est_sub_cp with similar distribution as src_cps.
+        #mdist = cdist(sub_pnts, [est_sub_cp], metric='mahalanobis', V=cov)[:,0]
 
-        est_sub_cp, _ = self._get_closest_pnt(cp_mean, sub_pnts)
-        # Get points arounnd est_sub_cp with similar distribution as src_cps.
-        mdist = cdist(sub_pnts, [est_sub_cp], metric='mahalanobis', V=cov)[:,0]
-
-        return mdist < self.mahalanobis_thresh
+        #return mdist < self.mahalanobis_thresh
+        
+        # Method 2: Use proximity
+        sub_contact_area_index = []
+        for point_on_src in src_cps:
+            point_on_sub, sub_index = self._get_closest_pnt(point_on_src, sub_pnts)
+            distance = norm(point_on_sub - point_on_src)
+            if distance < 0.003:
+                sub_contact_area_index.append(sub_index)
+        
+        return np.array(sub_contact_area_index)
 
     def _get_closest_pnt(self, pnt, pntcloud):
         """
@@ -317,11 +331,11 @@ class ToolSubstitution(object):
         return pntcloud[i,:], i
     
     def _find_sub_action_part(self, src_action_pnts, sub_pnts):
-        print "src_action_pnts"
-        print src_action_pnts
+        #print "src_action_pnts"
+        #print src_action_pnts
         
-        print "sub_pnts"
-        print sub_pnts
+        #print "sub_pnts"
+        #print sub_pnts
         
         sub_segments = np.unique(sub_pnts[:, -1]).tolist()
         
@@ -331,18 +345,18 @@ class ToolSubstitution(object):
         sub_action_segment_distance = 100.
         
         for segment in sub_segments:
-            print "segment: ", segment
+            print "[tool_substitution_controller][_find_sub_action_part] segment: ", segment
             indices = np.where(sub_pnts[:, -1] == segment)
             action_pnts = sub_pnts[indices][:, :-1]
             distance = get_np_pc_distance(src_action_pnts, action_pnts)
-            print "distance: ", distance
+            print "[tool_substitution_controller][_find_sub_action_part] distance: ", distance
             if distance < sub_action_segment_distance:
                 sub_action_segment_distance = distance
                 sub_action_segment = segment
                 sub_action_segment_indices = deepcopy(indices)
                 sub_action_segment_pnts = deepcopy(action_pnts)
         
-        print "sub_action_segment: ", sub_action_segment
+        print "[tool_substitution_controller][_find_sub_action_part] sub_action_segment: ", sub_action_segment
         
         return sub_action_segment, sub_action_segment_pnts, sub_action_segment_indices
 
@@ -1018,9 +1032,11 @@ class ToolSubstitution(object):
                                                            sub_pnts[sub_action_indices],
                                                            src_pnts[src_action_indices])
     
-        # Corresponding idx of sub contact surface for original sub pointcloud.
-        sub_cp_idx = self.sub_tool.segment_idx_to_idx([self._sub_action_segment],
-                                                      sub_action_part_cp_idx)
+        sub_cp_idx = []
+        if len(sub_action_part_cp_idx) > 5:
+            # Corresponding idx of sub contact surface for original sub pointcloud.
+            sub_cp_idx = self.sub_tool.segment_idx_to_idx([self._sub_action_segment],
+                                                          sub_action_part_cp_idx)
         
         return sub_cp_idx
     
@@ -1029,9 +1045,17 @@ class ToolSubstitution(object):
         #self._scale_pcs()
         # Find best initial alignment via rotations over these axes.
         # STEP 1: align the source and sub tools
-        initial_distance, initial_distance_percentage, T_sub_scale, T_src_pcd, T_sub_pcd, temp_src_T, T_src, T_sub = self._align_pnts(self._get_src_pnts(), self._get_sub_pnts(), keep_proportion=False)
+        initial_distance, initial_distance_percentage, T_sub_scale, src_pcd, sub_pcd, temp_src_T, T_src, T_sub = self._align_pnts(self._get_src_pnts(), self._get_sub_pnts(), keep_proportion=False)
+        
+        print "[tool_substitution_controller][step_0_initial_alignment] initial alignment distance: ", initial_distance
+        print "[tool_substitution_controller][step_0_initial_alignment] initial distance percentage: ", initial_distance_percentage
+        
         if self.visualize:
-            o3d.visualization.draw_geometries([T_src_pcd, T_sub_pcd], "step 0 initial alignment") 
+            copy_src_pcd = deepcopy(src_pcd)
+            copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            copy_sub_pcd = deepcopy(sub_pcd)
+            copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.]))            
+            o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 0: initial alignment") 
         
         #total_distance = initial_distance / initial_distance_percentage
         #distance = T_src_pcd.compute_point_cloud_distance(T_sub_pcd)
@@ -1043,13 +1067,24 @@ class ToolSubstitution(object):
         #print "initial_distance: ", initial_distance
         #print "initial_distance_percentage,", initial_distance_percentage
         
-        return initial_distance, initial_distance_percentage, T_sub_scale, T_src_pcd, T_sub_pcd, temp_src_T, T_src, T_sub
+        return initial_distance, initial_distance_percentage, T_sub_scale, src_pcd, sub_pcd, temp_src_T, T_src, T_sub
     
     def step_1_find_action_part(self, src_pcd, sub_pcd):
         # Get the points in the action segments of both tools
         scaled_src_action_pnts, scaled_sub_action_pnts, src_action_indices, sub_action_indices = self.get_tool_action_parts(src_pcd, sub_pcd)
         
-        #initial_distance = get_np_pc_distance(src_action_pnts, sub_action_pnts)
+        src_contact_area_indices = self.src_tool.contact_pnt_idx
+        src_contact_area_in_action_count = 0
+        for point_index in src_contact_area_indices:
+            if point_index in src_action_indices:
+                src_contact_area_in_action_count += 1
+        
+        src_contact_area_in_action_percentage = src_contact_area_in_action_count * 1. / (len(src_contact_area_indices) * 1.)
+        print "[tool_substitution_controller][step_1_find_action_part] src_contact_area_in_action_percentage: ", src_contact_area_in_action_percentage
+        
+        if src_contact_area_in_action_percentage < 0.8:
+            src_action_indices = deepcopy(src_contact_area_indices)
+            print "[tool_substitution_controller][step_1_find_action_part] source action was set to be the contact area"
         
         if self.visualize:
             source_action_pc = o3d.geometry.PointCloud()
@@ -1060,12 +1095,16 @@ class ToolSubstitution(object):
             sub_action_pc.points = o3d.utility.Vector3dVector(scaled_sub_action_pnts)
             sub_action_pc.paint_uniform_color(np.array([1., 0., 0.]))
             
-            o3d.visualization.draw_geometries([source_action_pc, sub_action_pc], "action parts chosen")
+            o3d.visualization.draw_geometries([source_action_pc, sub_action_pc], "Step 1: sub action parts chosen")
         
         return scaled_src_action_pnts, scaled_sub_action_pnts, src_action_indices, sub_action_indices
     
     def step_2_get_initial_alignment_contact_area(self, src_pcd, sub_pcd, src_action_indices, sub_action_indices, T_src, T_sub, T_sub_scale):
         sub_contact_point_idx = self._get_sub_contact_indices(np.asarray(src_pcd.points), np.asarray(sub_pcd.points), np.asarray(self.src_tool.contact_pnt_idx), src_action_indices, sub_action_indices)
+        
+        if self.visualize:
+            visualize_tool(sub_pcd, cp_idx=sub_contact_point_idx, name="Step 2: contact area with initial alignment on descaled sub tool")
+            visualize_tool(self.sub_pcd, cp_idx=sub_contact_point_idx, name="Step 2: contact area with initial alignment on original sub tool")
         
         return (sub_contact_point_idx, deepcopy(T_src), deepcopy(T_sub), deepcopy(T_sub_scale), deepcopy(sub_pcd)) # when revert this, first unscale, and then unrotate        
     
@@ -1073,6 +1112,15 @@ class ToolSubstitution(object):
     def step_3_scale_sub_tool(self, src_pcd, sub_pcd, src_action_index, sub_action_index):
         src_action_part = deepcopy(np.array(src_pcd.points)[src_action_index])
         sub_action_part = deepcopy(np.array(sub_pcd.points)[sub_action_index])
+        
+        if self.visualize:
+            copy_sub_pcd = o3d.geometry.PointCloud()
+            copy_sub_pcd.points = o3d.utility.Vector3dVector(deepcopy(src_action_part))
+            copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.]))
+            copy_src_pcd = o3d.geometry.PointCloud()
+            copy_src_pcd.points = o3d.utility.Vector3dVector(deepcopy(sub_action_part))
+            copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 3: action parts chosen to be scaled")        
 
         src_action_part_bb = ToolPointCloud(src_action_part, normalize=False).bb
         src_action_part_bb._calculate_axis()
@@ -1089,16 +1137,33 @@ class ToolSubstitution(object):
         scaled_sub_pcd = deepcopy(sub_pcd)
         scaled_sub_pcd.transform(T_sub_action_part_scale)
         
+        if self.visualize:
+            copy_scaled_sub_pcd = deepcopy(scaled_sub_pcd)
+            copy_scaled_sub_pcd.paint_uniform_color(np.array([1., 0., 0.]))
+            copy_src_pcd = deepcopy(self.src_pcd)
+            copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            o3d.visualization.draw_geometries([copy_src_pcd, copy_scaled_sub_pcd], "Step 3: scale sub action part")
+        
         return scaled_sub_pcd, T_sub_action_part_scale
     
-    def step_4_register_action_parts(self, src_pcd, sub_pcd):
+    def step_4_register_action_parts(self, src_pcd, src_action_indices, sub_pcd, sub_action_indices):
         copy_src_pcd = deepcopy(src_pcd)
         copy_sub_pcd = deepcopy(sub_pcd)
         
-        aligned_set, min_transformations, min_threshold = align_pcd_select_size([copy_src_pcd, copy_sub_pcd])
+        src_action_pcd = o3d.geometry.PointCloud()
+        src_action_pcd.points = o3d.utility.Vector3dVector(np.asarray(copy_src_pcd.points)[src_action_indices])
+        
+        sub_action_pcd = o3d.geometry.PointCloud()
+        sub_action_pcd.points = o3d.utility.Vector3dVector(np.asarray(copy_sub_pcd.points)[sub_action_indices])
+        
+        aligned_set, min_transformations, min_threshold = align_pcd_select_size([src_action_pcd, sub_action_pcd])
         
         if self.visualize:
-            o3d.visualization.draw_geometries(aligned_set, "align action parts")
+            copy_src_pcd = deepcopy(aligned_set[0])
+            copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            copy_sub_pcd = deepcopy(aligned_set[1])
+            copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.]))            
+            o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 4: align action parts")
         
         return aligned_set[1], min_transformations[1], min_threshold
         
@@ -1135,28 +1200,109 @@ class ToolSubstitution(object):
     def step_5_get_aligned_contact_area(self, src_pcd, sub_pcd, src_action_indices, sub_action_indices, T_src, T_sub, T_sub_scale):
         sub_contact_point_idx = self._get_sub_contact_indices(np.asarray(src_pcd.points), np.asarray(sub_pcd.points), np.asarray(self.src_tool.contact_pnt_idx), src_action_indices, sub_action_indices)
         
+        if self.visualize:
+            visualize_tool(sub_pcd, cp_idx=sub_contact_point_idx, name="Step 5: Contact area from ICP")
+        
         return (sub_contact_point_idx, deepcopy(T_src), deepcopy(T_sub), deepcopy(T_sub_scale), deepcopy(sub_pcd))        
 
     def step_6_choose_contact_area(self, contact_area_1, contact_area_2, sub_action_indices):
         sub_pcd = deepcopy(self.sub_pcd)
+        contact_area_1_pnts = np.asarray(sub_pcd.points)[contact_area_1[0]]
+        contact_area_2_pnts = np.asarray(sub_pcd.points)[contact_area_2[0]]
         
-        contact_area_1_pcd = deepcopy(self._np_to_o3d(np.asarray(sub_pcd.points)[contact_area_1[0]]))
-        contact_area_2_pcd = deepcopy(self._np_to_o3d(np.asarray(sub_pcd.points)[contact_area_2[0]]))
+        contact_area = None
         
-        aligned_set, min_transformations, min_threshold = align_pcd_select_size([contact_area_1_pcd, contact_area_2_pcd])
+        if len(contact_area_1_pnts) == 0 and len(contact_area_2_pnts) == 0:
+            print "[tool_substitution_controller][step_6_choose_contact_area] Both contact areas are empty. Choose 1"
+            contact_area = contact_area_1
+            return contact_area
         
+        if len(contact_area_1_pnts) == 0:
+            print "[tool_substitution_controller][step_6_choose_contact_area] initial alignment contact areas is empty. Choose 2"
+            contact_area = contact_area_2
+            return contact_area
+        
+        if len(contact_area_2_pnts) == 0:
+            print "[tool_substitution_controller][step_6_choose_contact_area] ICP alignment contact areas is empty. Choose 1"
+            contact_area = contact_area_1
+            return contact_area            
+        
+        print "[tool_substitution_controller][step_6_choose_contact_area] num of points on contact_area_1_indices: ", len(contact_area_1_pnts)
+        print "[tool_substitution_controller][step_6_choose_contact_area] num of points on contact_area_2_indices: ", len(contact_area_2_pnts)
+    
+        if len(contact_area_1_pnts) * 1. / (len(contact_area_2_pnts) * 1.) > 2:
+            print "[tool_substitution_controller][step_6_choose_contact_area] Initial alignment contact areas has a lot more points. Choose 1"
+            contact_area = contact_area_1
+            return contact_area
+
+        if len(contact_area_2_pnts) * 1. / (len(contact_area_1_pnts) * 1.) > 2:
+            print "[tool_substitution_controller][step_6_choose_contact_area] ICP alignment contact areas has a lot more points. Choose 2"
+            contact_area = contact_area_2
+            return contact_area        
+
         sub_action_part = deepcopy(np.array(self.sub_pcd.points)[sub_action_indices])
         sub_action_part_bb = ToolPointCloud(sub_action_part, normalize=False).bb
         sub_action_part_bb._calculate_axis()
-        sub_action_part_norm = sub_action_part_bb.norms 
+        sub_action_part_norm = sub_action_part_bb.norms
         
-        dislikeness = min_threshold / max(sub_action_part_norm) # the high the value, the more dislike the two contact areas are
+        contact_area_1_pcd = deepcopy(self._np_to_o3d(contact_area_1_pnts))
+        contact_area_2_pcd = deepcopy(self._np_to_o3d(contact_area_2_pnts))
+        contact_area_1_pcd_center = contact_area_1_pcd.get_center()
+        contact_area_2_pcd_center = contact_area_2_pcd.get_center()
         
-        contact_area = None
-        if dislikeness > 0.05: # tune this value
-            contact_area = contact_area_2
-        else:
+        contact_area_distance = norm(contact_area_1_pcd_center - contact_area_2_pcd_center)
+        contact_area_distance_percentage = contact_area_distance / max(sub_action_part_norm)
+        print "[tool_substitution_controller][step_6_choose_contact_area] contact area distance: ", contact_area_distance
+        print "[tool_substitution_controller][step_6_choose_contact_area] contact area distance relative to tool action: ", contact_area_distance_percentage
+        if contact_area_distance_percentage < 0.05: # the two are very closest
+            print "[tool_substitution_controller][step_6_choose_contact_area] The contact areas are close. Choose 1: the initial alignment contact area"
             contact_area = contact_area_1
+        else:
+            print "[tool_substitution_controller][step_6_choose_contact_area] The contact areas are far away from each other."
+            contact_area_2_pcd.translate(contact_area_1_pcd_center - contact_area_2_pcd_center)
+            
+            aligned_set, min_transformations, min_threshold = align_pcd_select_size([contact_area_1_pcd, contact_area_2_pcd])
+            
+            aligned_set_1_center = aligned_set[0].get_center()
+            aligned_set_2_center = aligned_set[1].get_center()
+            aligned_set[1].translate(aligned_set_1_center - aligned_set_2_center)
+            distance = aligned_set[0].compute_point_cloud_distance(aligned_set[1])
+            
+            if self.visualize:
+                copy_contact_area_1_pcd = deepcopy(aligned_set[0])
+                copy_contact_area_1_pcd.paint_uniform_color(np.array([1., 0., 0.]))
+                copy_contact_area_2_pcd = deepcopy(aligned_set[1])
+                copy_contact_area_2_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+                o3d.visualization.draw_geometries([copy_contact_area_1_pcd, copy_contact_area_2_pcd], "Step 6: align the two contact areas")        
+            
+            dislikeness = np.average(distance) / max(sub_action_part_norm) # the high the value, the more dislike the two contact areas are
+            
+            print "[tool_substitution_controller][step_6_choose_contact_area] average distance: ", np.average(distance)
+            print "[tool_substitution_controller][step_6_choose_contact_area] dislikeness: ", dislikeness
+            print "[tool_substitution_controller][step_6_choose_contact_area] max distance (0, 1): ", np.max(distance)
+            print "[tool_substitution_controller][step_6_choose_contact_area] max distance percentage(0, 1): ", np.max(distance) / max(sub_action_part_norm)
+            print "[tool_substitution_controller][step_6_choose_contact_area] sub action dimension: ", max(sub_action_part_norm)
+            
+            if dislikeness > 0.05: # tune this value
+                print "[tool_substitution_controller][step_6_choose_contact_area] The contact areas are different."
+                src_contact_area_pcd = o3d.geometry.PointCloud()
+                src_contact_area_pcd.points = o3d.utility.Vector3dVector(np.asarray(self.src_pcd.points)[self.src_tool.contact_pnt_idx])
+                aligned_set_1, _, distance_1 = align_pcd_select_size([contact_area_1_pcd, src_contact_area_pcd])
+                aligned_set_2, _, distance_2 = align_pcd_select_size([contact_area_2_pcd, src_contact_area_pcd])
+                if self.visualize:
+                    o3d.visualization.draw_geometries(aligned_set_1, "Step 6: align contact area 1 and source contact area")
+                    o3d.visualization.draw_geometries(aligned_set_2, "Step 6: align contact area 2 and source contact area")
+                print "[tool_substitution_controller][step_6_choose_contact_area] contact area 1 distance to source: ", distance_1
+                print "[tool_substitution_controller][step_6_choose_contact_area] contact area 2 distance to source: ", distance_2
+                if distance_1 <= distance_2:
+                    print "[tool_substitution_controller][step_6_choose_contact_area] Initial Alignment contact areas looks more like the source contact area. Choose 1: the initial alignment contact area"
+                    contact_area = contact_area_2
+                else:
+                    print "[tool_substitution_controller][step_6_choose_contact_area] ICP Alignment contact areas looks more like the source contact area. Choose 2: the ICP contact area"
+                    contact_area = contact_area_2
+            else:
+                print "[tool_substitution_controller][step_6_choose_contact_area] The contact areas are similar. Choose 1: the initial alignment contact area"
+                contact_area = contact_area_1
         
         return contact_area
 
@@ -1167,22 +1313,54 @@ class ToolSubstitution(object):
         T_sub_scale           = deepcopy(contact_area[3])
         sub_pcd               = deepcopy(contact_area[4])
         
-        src_contact_area = np.asarray(self.src_pcd.points)[self.src_tool.self.src_tool.contact_pnt_idx]
+        src_pcd = deepcopy(self.src_pcd)
+        src_pcd.transform(T_src)
+        src_contact_area = np.asarray(src_pcd.points)[self.src_tool.contact_pnt_idx]
         src_contact_area_center = np.mean(src_contact_area, axis=0)
         
         inv_T_sub_scale = T_inv(T_sub_scale)
         sub_pcd.transform(inv_T_sub_scale)
         
         # align the contact areas
-        sub_contact_area = np.asarray(sub_pcd)[sub_contact_point_idx]
-        sub_contact_area_center = np.mean(sub_contact_area, axis=0)
-        sub_pcd.translate(src_contact_area_center - sub_contact_area_center)
+        sub_contact_area = np.asarray(sub_pcd.points)[sub_contact_point_idx]
+        if len(sub_contact_area) != 0:
+            sub_contact_area_center = np.mean(sub_contact_area, axis=0)
+            sub_pcd.translate(src_contact_area_center - sub_contact_area_center)
+        
+        if self.visualize:
+            copy_src_pcd = deepcopy(src_pcd)
+            copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            copy_sub_pcd = deepcopy(sub_pcd)
+            copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.]))            
+            o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 7: translation result")        
         
         aligned_set, min_transformations, min_threshold = align_pcd_select_size([sub_pcd, self.sub_pcd])
         
+        if self.visualize:
+            copy_result_pcd = deepcopy(aligned_set[1])
+            copy_result_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            copy_target_pcd = deepcopy(aligned_set[0])
+            copy_target_pcd.paint_uniform_color(np.array([1., 0., 0.]))            
+            o3d.visualization.draw_geometries([copy_result_pcd, copy_target_pcd], "Step 7: self aligned result")
+        
         T_sub = min_transformations[1]
         
-        Tsrc_sub = get_homogenous_transformation_matrix_inverse(T_src, T_sub)
+        print "[tool_substitution_controller][step_7_align_tools] T_sub"
+        print T_sub
+        
+        print "[tool_substitution_controller][step_7_align_tools] T_src"
+        print T_src
+        
+        if self.visualize:
+            copy_src_pcd = deepcopy(self.src_pcd)
+            copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            copy_src_pcd.transform(T_src)
+            copy_sub_pcd = deepcopy(self.sub_pcd)
+            copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.])) 
+            copy_sub_pcd.transform(T_sub)
+            o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 7: final alignment result")        
+                
+        Tsrc_sub = np.matmul(get_homogenous_transformation_matrix_inverse(T_src), T_sub)
         
         return Tsrc_sub
 
@@ -1206,11 +1384,14 @@ class ToolSubstitution(object):
         
         step_1_scaled_src_action_pnts = step_1_results[0]
         step_1_scaled_sub_action_pnts = step_1_results[1]
-        step_1_src_action_indices     = step_1_results[3]
-        step_1_sub_action_indices     = step_1_results(4)
+        step_1_src_action_indices     = step_1_results[2]
+        step_1_sub_action_indices     = step_1_results[3]
         #src action segment: self._src_action_segment
         #sub action segment: self._sub_action_segment
         #src contact area index: self.src_tool.contact_pnt_idx
+        
+        # TODO: delete this, use the contact are as the action part
+        #step_1_src_action_indices = deepcopy(self.src_tool.contact_pnt_idx)
         
         # the contact area of based on the initial alignment
         step_2_results = self.step_2_get_initial_alignment_contact_area(step_0_src_pcd,
@@ -1229,15 +1410,24 @@ class ToolSubstitution(object):
         step_3_T_sub_action_part_scale = step_3_results[1] # scale appeared first, so for the contact area found with this method, first unrotate, and then unscale
         
         # use ICP to align the action part to find the contact area
-        step_4_results = self.step_4_register_action_parts(self.src_pcd, step_3_scaled_sub_pcd)
+        step_4_results = self.step_4_register_action_parts(self.src_pcd, step_1_src_action_indices, step_3_scaled_sub_pcd, step_1_sub_action_indices)
         
         step_4_scaled_aligned_sub_action_pcd = step_4_results[0]
         step_4_T_sub_pcd                     = step_4_results[1]
         step_4_threshold                     = step_4_results[2]
         
+        # use ICP to align the contact area with the action part of the sub tool to find the contact area
+        #step_4_results = self.step_4_register_action_parts(self.src_pcd, self.src_tool.contact_pnt_idx, step_3_scaled_sub_pcd, step_1_sub_action_indices)
+        
+        #step_4_scaled_aligned_sub_action_pcd = step_4_results[0]
+        #step_4_T_sub_pcd                     = step_4_results[1]
+        #step_4_threshold                     = step_4_results[2]
+        
         # find the corresponding contact area
+        scaled_aligned_sub_pcd = deepcopy(step_3_scaled_sub_pcd)
+        scaled_aligned_sub_pcd.transform(step_4_T_sub_pcd)
         step_5_results = self.step_5_get_aligned_contact_area(self.src_pcd,
-                                                              step_4_scaled_aligned_sub_action_pcd,
+                                                              scaled_aligned_sub_pcd,
                                                               step_1_src_action_indices, 
                                                               step_1_sub_action_indices,                                                              
                                                               np.identity(4),
@@ -1251,6 +1441,12 @@ class ToolSubstitution(object):
         
         # descale and align the pc based on the contact area chosen
         Tsrc_sub = self.step_7_align_tools(contact_area)
+        
+        print "[tool_substitution_controller][get_T_cp] RETURN Tsrc_sub: "
+        print Tsrc_sub
+        
+        print "[tool_substitution_controller][get_T_cp] RETURN contact area: "
+        print contact_area[0]
         
         return Tsrc_sub, contact_area[0]
         
