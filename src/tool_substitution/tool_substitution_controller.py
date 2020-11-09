@@ -1287,16 +1287,27 @@ class ToolSubstitution(object):
                 print "[tool_substitution_controller][step_6_choose_contact_area] The contact areas are different."
                 src_contact_area_pcd = o3d.geometry.PointCloud()
                 src_contact_area_pcd.points = o3d.utility.Vector3dVector(np.asarray(self.src_pcd.points)[self.src_tool.contact_pnt_idx])
-                aligned_set_1, _, distance_1 = align_pcd_select_size([contact_area_1_pcd, src_contact_area_pcd])
-                aligned_set_2, _, distance_2 = align_pcd_select_size([contact_area_2_pcd, src_contact_area_pcd])
+                
+                aligned_set_1, _, _ = align_pcd_select_size([contact_area_1_pcd, src_contact_area_pcd])
+                aligned_set_1_sub_center = aligned_set_1[0].get_center()
+                aligned_set_1_src_center = aligned_set_1[1].get_center()
+                aligned_set_1[1].translate(aligned_set_1_sub_center - aligned_set_1_src_center)
+                distance_1 = np.average(aligned_set_1[0].compute_point_cloud_distance(aligned_set_1[1]))
+                
+                aligned_set_2, _, _ = align_pcd_select_size([contact_area_2_pcd, src_contact_area_pcd])
+                aligned_set_2_sub_center = aligned_set_2[0].get_center()
+                aligned_set_2_src_center = aligned_set_2[1].get_center()
+                aligned_set_2[1].translate(aligned_set_2_sub_center - aligned_set_2_src_center)
+                distance_2 = np.average(aligned_set_2[0].compute_point_cloud_distance(aligned_set_2[1]))
+                
                 if self.visualize:
                     o3d.visualization.draw_geometries(aligned_set_1, "Step 6: align contact area 1 and source contact area")
                     o3d.visualization.draw_geometries(aligned_set_2, "Step 6: align contact area 2 and source contact area")
                 print "[tool_substitution_controller][step_6_choose_contact_area] contact area 1 distance to source: ", distance_1
                 print "[tool_substitution_controller][step_6_choose_contact_area] contact area 2 distance to source: ", distance_2
-                if distance_1 <= distance_2:
+                if distance_1 <= distance_2 * 1.5:
                     print "[tool_substitution_controller][step_6_choose_contact_area] Initial Alignment contact areas looks more like the source contact area. Choose 1: the initial alignment contact area"
-                    contact_area = contact_area_2
+                    contact_area = contact_area_1
                 else:
                     print "[tool_substitution_controller][step_6_choose_contact_area] ICP Alignment contact areas looks more like the source contact area. Choose 2: the ICP contact area"
                     contact_area = contact_area_2
@@ -1403,41 +1414,44 @@ class ToolSubstitution(object):
                                                                         step_0_T_sub_scale)
         contact_area_1 = step_2_results # when revert this, first unscale, and then unrotate  
         
-        # scale the two tools based on the action part size
-        step_3_results = self.step_3_scale_sub_tool(self.src_pcd, self.sub_pcd, step_1_src_action_indices, step_1_sub_action_indices)
-        
-        step_3_scaled_sub_pcd          = step_3_results[0]
-        step_3_T_sub_action_part_scale = step_3_results[1] # scale appeared first, so for the contact area found with this method, first unrotate, and then unscale
-        
-        # use ICP to align the action part to find the contact area
-        step_4_results = self.step_4_register_action_parts(self.src_pcd, step_1_src_action_indices, step_3_scaled_sub_pcd, step_1_sub_action_indices)
-        
-        step_4_scaled_aligned_sub_action_pcd = step_4_results[0]
-        step_4_T_sub_pcd                     = step_4_results[1]
-        step_4_threshold                     = step_4_results[2]
-        
-        # use ICP to align the contact area with the action part of the sub tool to find the contact area
-        #step_4_results = self.step_4_register_action_parts(self.src_pcd, self.src_tool.contact_pnt_idx, step_3_scaled_sub_pcd, step_1_sub_action_indices)
-        
-        #step_4_scaled_aligned_sub_action_pcd = step_4_results[0]
-        #step_4_T_sub_pcd                     = step_4_results[1]
-        #step_4_threshold                     = step_4_results[2]
-        
-        # find the corresponding contact area
-        scaled_aligned_sub_pcd = deepcopy(step_3_scaled_sub_pcd)
-        scaled_aligned_sub_pcd.transform(step_4_T_sub_pcd)
-        step_5_results = self.step_5_get_aligned_contact_area(self.src_pcd,
-                                                              scaled_aligned_sub_pcd,
-                                                              step_1_src_action_indices, 
-                                                              step_1_sub_action_indices,                                                              
-                                                              np.identity(4),
-                                                              np.matmul(step_4_T_sub_pcd, step_3_T_sub_action_part_scale),
-                                                              step_3_T_sub_action_part_scale)
-        contact_area_2 = step_5_results
-        
-        # choose the contact area
-        step_6_results = self.step_6_choose_contact_area(contact_area_1, contact_area_2, step_1_sub_action_indices)
-        contact_area = step_6_results
+        if step_0_initial_distance < 0.005:
+            contact_area = contact_area_1
+        else:
+            # scale the two tools based on the action part size
+            step_3_results = self.step_3_scale_sub_tool(self.src_pcd, self.sub_pcd, step_1_src_action_indices, step_1_sub_action_indices)
+            
+            step_3_scaled_sub_pcd          = step_3_results[0]
+            step_3_T_sub_action_part_scale = step_3_results[1] # scale appeared first, so for the contact area found with this method, first unrotate, and then unscale
+            
+            # use ICP to align the action part to find the contact area
+            step_4_results = self.step_4_register_action_parts(self.src_pcd, step_1_src_action_indices, step_3_scaled_sub_pcd, step_1_sub_action_indices)
+            
+            step_4_scaled_aligned_sub_action_pcd = step_4_results[0]
+            step_4_T_sub_pcd                     = step_4_results[1]
+            step_4_threshold                     = step_4_results[2]
+            
+            # use ICP to align the contact area with the action part of the sub tool to find the contact area
+            #step_4_results = self.step_4_register_action_parts(self.src_pcd, self.src_tool.contact_pnt_idx, step_3_scaled_sub_pcd, step_1_sub_action_indices)
+            
+            #step_4_scaled_aligned_sub_action_pcd = step_4_results[0]
+            #step_4_T_sub_pcd                     = step_4_results[1]
+            #step_4_threshold                     = step_4_results[2]
+            
+            # find the corresponding contact area
+            scaled_aligned_sub_pcd = deepcopy(step_3_scaled_sub_pcd)
+            scaled_aligned_sub_pcd.transform(step_4_T_sub_pcd)
+            step_5_results = self.step_5_get_aligned_contact_area(self.src_pcd,
+                                                                  scaled_aligned_sub_pcd,
+                                                                  step_1_src_action_indices, 
+                                                                  step_1_sub_action_indices,                                                              
+                                                                  np.identity(4),
+                                                                  np.matmul(step_4_T_sub_pcd, step_3_T_sub_action_part_scale),
+                                                                  step_3_T_sub_action_part_scale)
+            contact_area_2 = step_5_results
+            
+            # choose the contact area
+            step_6_results = self.step_6_choose_contact_area(contact_area_1, contact_area_2, step_1_sub_action_indices)
+            contact_area = step_6_results
         
         # descale and align the pc based on the contact area chosen
         Tsrc_sub = self.step_7_align_tools(contact_area)
@@ -1449,271 +1463,6 @@ class ToolSubstitution(object):
         print contact_area[0]
         
         return Tsrc_sub, contact_area[0]
-        
-        # Scale action parts to same size for better comparison. (undistortional scale)
-        #src_action_pnts = self._get_src_pnts()[src_action_indices]
-        #src_action_pnts = self._get_src_pnts()[src_action_indices]
-        #sub_action_pnts = self._get_sub_pnts()[sub_action_indices]
-
-        #print "src_action_pnts"
-        #print src_action_pnts
-        #print "sub_action_pnts"
-        #print sub_action_pnts
-
-        #initial_distance, initial_distance_percentage, T_sub_action_part_scale, T_src_action_pcd, T_sub_action_pcd, temp_src_T, T_src_action, T_sub_action = self._align_pnts(src_action_pnts, sub_action_pnts, keep_proportion=True)
-  
-        #o3d.visualization.draw_geometries([T_src_action_pcd, T_sub_action_pcd], "action parts alignment")
-        
-        #self.temp_src_T = temp_src_T
-        #self.T_src_pcd.transform(T_src)
-        #self.T_sub_pcd.transform(T_sub)
-        ##self.T_sub_pcd.transform(T_sub_action_part_scale)
-        #self.scale_Ts.append(T_sub_action_part_scale)
-        
-        #o3d.visualization.draw_geometries([self.T_src_pcd, self.T_sub_pcd], "tool alignment based on action part")
-        
-        ## TODO: save those transformations
-        
-        ##print "SCALED SUB SEGMENTS: ", scaled_sub_pc.segment_list
-        ##_, scale_f = ToolPointCloud(sub_action_part,
-                                    ##normalize=False).scale_pnts_to_target(ToolPointCloud(src_action_part,
-                                                                                         ##normalize=False))
-        ##T_sub_action_part_scale = get_scaling_T(scale=scale_f)
-        
-        ##self.T_sub_pcd.transform(T_sub_action_part_scale)
-        ##self.scale_Ts.append(T_sub_action_part_scale)    
-
-               
-
-        #raise Exception("stop")
-
-
-        ##icp_trans, fit, sub_action_pcd, src_action_pcd = self.icp_alignment_select_size(sub_action_pnts,
-                                                                                        ##src_action_pnts,
-                                                                                        ##self.correspondence_thresh,
-                                                                                        ##n_iter)
-        #icp_trans, fit, sub_action_pcd, src_action_pcd, distance = self.icp_alignment_select_size(sub_action_pnts,
-                                                                                                  #src_action_pnts,
-                                                                                                  #self.correspondence_thresh,
-                                                                                                  #n_iter)
-        ##icp_trans, fit, sub_action_pcd, src_action_pcd = self.icp_alignment(sub_action_pnts,
-                                                                            ##src_action_pnts,
-                                                                            ##self.correspondence_thresh,
-                                                                            ##n_iter)                                                                                        
-
-
-        ##print "ORGINAL ALIGN FITNESS: ", align_fit
-        ##print "INIT ICP FITNESS:      ", fit
-        ##fit_ratio = fit / align_fit
-
-        ##if fit_ratio > self.fit_ratio_thresh:
-            ##print "USING INIT. ICP RESULTS.."
-            ##T_align = icp_trans
-        ##else:
-            ##print "SKIPPING  INIT. ICP RESULTS, USING INIT. ALIGNMENT."
-            ##T_align = get_T_from_R_p()
-        
-        #T_align = icp_trans
-        #initial_T_align = get_T_from_R_p()
-        #if initial_distance < distance:
-            #T_align = initial_T_align
-        
-        #print "Refining registration..."
-        ## Refine initial icp alignment.
-        #_, aligned_sub_pcd, T_align, best_fit, best_distance = self.refine_registration_select_size(T_align,
-                                                                                                    #sub_action_pcd,
-                                                                                                    #src_action_pcd,
-                                                                                                    #name="Aligned action parts")        
-        
-        ##_, aligned_sub_pcd, T_align, best_fit = self.refine_registration_select_size(T_align,
-                                                                             ##sub_action_pcd,
-                                                                             ##src_action_pcd,
-                                                                             ##name="Aligned action parts")
-        ##_, aligned_sub_pcd, T_align, fit = self.refine_registration(T_align,
-                                                                 ##sub_action_pcd,
-                                                                 ##src_action_pcd,
-                                                                 ##self.voxel_size,
-                                                                 ##name="Aligned action parts")
-
-        ##print "????????? fit score is: ", best_fit
-        #print "######################################################################"
-        #if initial_distance < best_distance:
-            #print "use original alignement"
-            #T_align = initial_T_align
-        #else:
-            #print "use new alignment"
-        
-        #print "\tinitial_average_distance: ", initial_distance
-        #print "\talignment average distance: ", best_distance
-        #print "######################################################################"
-        ##raise Exception("stop")
-
-        #if self.visualize:
-            #print "TEST ALIGNMENT"
-            #o3d.visualization.draw_geometries([src_action_pcd, # duplicate ??
-                                               #src_action_pcd,
-                                               #self.T_src_pcd],
-                                               #"Testing sec action part alignment")
-
-        #self.T_sub_pcd.transform(T_align)
-        ## aligned_sub_pcd = sub_action_pcd.transform(T_align)
-
-        ## if self.visualize:
-        ##     print "sub action part and full tool alignment"
-        ##     o3d.visualization.draw_geometries([self.T_sub_pcd, aligned_sub_pcd])
-
-        ## if self.visualize:
-        ##     print "src action part and full tool alignment"
-        ##     o3d.visualization.draw_geometries([src_action_pcd, self.T_src_pcd])
-
-        #aligned_src = np.asarray(src_action_pcd.points)
-        #aligned_sub = np.asarray(aligned_sub_pcd.points)
-
-        ## visualize_two_pcs(aligned_sub, aligned_src)
-        #src_action_part_cp_idx = self.src_tool.idx_to_segment_idx(self.src_tool.contact_pnt_idx)
-        #src_contact_pnt = aligned_src[src_action_part_cp_idx, :]
-        ## src_contact_pnt = self._get_src_pnts(get_segments=False)[src_action_part_cp_idx, :]
-        ## src_contact_pnt = self.src_tool.pnts[src_action_part_cp_idx, :]
-        ## Reshape point for easy computation
-        #src_contact_pnt = src_contact_pnt.reshape(1,-1) \
-            #if len(src_contact_pnt.shape) == 1 else src_contact_pnt
-        
-        #if self.visualize:
-            #src_contact_o3d_pc = o3d.geometry.PointCloud()
-            #src_contact_o3d_pc.points = o3d.utility.Vector3dVector(src_contact_pnt)
-            #src_contact_o3d_pc.paint_uniform_color(np.array([1., 0., 0.]))
-            #o3d.visualization.draw_geometries([src_contact_o3d_pc], "src_contact_o3d_pc")
-
-        ## Estimate contact surface on the sub tool
-        #sub_action_part_cp_idx = self._get_contact_surface(src_contact_pnt,
-                                                    #aligned_sub,
-                                                    #aligned_src)
-
-        ## Corresponding idx of sub contact surface for original sub pointcloud.
-        #sub_cp_idx = self.sub_tool.segment_idx_to_idx([self._sub_action_segment],
-                                                      #sub_action_part_cp_idx)
-
-        #self.sub_tool.contact_pnt_idx = sub_cp_idx
-        #print "SUB CP IDX ", sub_cp_idx
-
-        #mean_sub_action_part_cp = np.mean(aligned_sub[sub_action_part_cp_idx, :],axis=0)
-        ## mean_sub_action_part_cp = np.mean(src_contact_pnt)
-        #scale_T = T_inv(np.linalg.multi_dot(self.scale_Ts)) # Get inverted scaling T
-        #scale_f = np.diag(scale_T)[:3] # get first 3 diag entries.
-        #final_scale_T = get_scaling_T(scale_f, mean_sub_action_part_cp)
-
-        #if self.visualize:
-            #print "Visualizing sub contact point"
-            #visualize_tool(aligned_sub_pcd, sub_action_part_cp_idx, 
-                #name="Transformed sub tool with calc'd contact surface")
-            #print "visualizing src contact point"
-            #visualize_tool(self.T_sub_pcd, sub_cp_idx,
-                #name="Transformed src tool with calc'd contact surface")
-
-
-        #descaled_aligned_sub = deepcopy(self.T_sub_pcd).transform(final_scale_T)
-        ## descaled_aligned_sub = deepcopy(aligned_sub_pcd).transform(scale_T)
-        ## descaled_sub_action = deepcopy(aligned_sub_pcd).transform(final_scale_T)
-        #if self.visualize:
-            #print "DESCALING"
-            #visualize_reg(aligned_sub_pcd, self.sub_pcd, descaled_aligned_sub, name="descaling")
-
-        #self.T_sub_pcd.transform(final_scale_T)
-        ## descaled_sub_mean_cp = np.mean(np.asarray(descaled_aligned_sub.points)[sub_cp_idx, :], axis=0)
-        ## descaled_sub_mean_cp = np.mean(np.asarray(descaled_aligned_sub.points)[sub_action_part_cp_idx, :], axis=0)
-        #if self.visualize:
-            #print "VISUALIZING DESCALE BEFORE TRANS"
-            #visualize_reg(aligned_sub_pcd, src_action_pcd, descaled_aligned_sub, name="visualizing descale before trans")
-
-        ## T_translate = get_T_from_R_p(p=np.mean(src_contact_pnt,axis=0)-descaled_sub_mean_cp)
-        ## descaled_aligned_sub.transform(T_translate)
-        ## self.T_sub_pcd.transform(T_translate)
-
-        ## print "VISUALIZING DESCALE AFTER TRANS"
-        ## visualize_reg(aligned_sub_pcd, src_action_pcd, descaled_aligned_sub)
-
-
-        ## print "HELOO"
-        ## visualize_reg(descaled_aligned_sub, self.src_pcd,
-        ##               deepcopy(descaled_aligned_sub).transform(self.temp_src_T))
-        #descaled_aligned_sub.transform(self.temp_src_T)
-        ## This transformation accounts for the alignment of the src tool to
-        ## its principal axes
-        #self.T_sub_pcd.transform(self.temp_src_T)
-
-        #descaled_sub_pnts = np.asarray(self._get_sub_pnts(get_segments=False))
-        #original_sub_pnts = np.asarray(self.sub_pcd.points)
-
-        #new_vox_size = self.voxel_size
-        #new_corr_thresh = self.correspondence_thresh
-
-        ##icp_T, icp_fit, _, _= self.icp_alignment(original_sub_pnts,
-                                                 ##descaled_sub_pnts,
-                                                 ##new_corr_thresh,
-                                                 ##n_iter=n_iter,
-                                                 ##)        
-
-        #icp_T, icp_fit, _, _, icp_distance = self.icp_alignment_select_size(original_sub_pnts,
-                                                                            #descaled_sub_pnts,
-                                                                            #new_corr_thresh,
-                                                                            #n_iter=n_iter,
-                                                                            #)
-
-        ##aligned_sub_pcd,_, refine_T, refine_fit = self.refine_registration(icp_T,
-                                                                           ##self.sub_pcd,
-                                                                           ### descaled_aligned_sub,
-                                                                           ##self.T_sub_pcd,
-                                                                           ##self.voxel_size,
-                                                                           ##name="Aligning sub tool in init pos to transformed sub tool")
-
-        #aligned_sub_pcd, _, refine_T, refine_fit, refine_distance = self.refine_registration_select_size(icp_T,
-                                                                                                        #self.sub_pcd,
-                                                                                                        ## descaled_aligned_sub,
-                                                                                                        #self.T_sub_pcd,
-                                                                                                        #name="Aligning sub tool in init pos to transformed sub tool")
-
-
-        ##print "ICP fit: ", icp_fit
-        ##print "Refine fit: ", refine_fit
-        
-        #print "######################################################################"
-        #print "ICP distance: ", icp_distance
-        #print "Refine distance: ", refine_distance
-        #print "######################################################################"
-
-        ##final_trans = icp_T if icp_fit > refine_fit else refine_T
-        #final_trans = icp_T if icp_distance < refine_distance else refine_T
-        ## self.T_sub_pcd.transform(final_trans)
-
-        ## Algin the centroids of contact areas of the tools.
-        #src_mean_cp = np.mean(np.asarray(self.src_pcd.points)[self.src_tool.contact_pnt_idx,:], axis=0)
-        #sub_mean_cp = np.mean(np.asarray(self.T_sub_pcd.points)[sub_cp_idx, :], axis=0)
-        #T_translate = get_T_from_R_p(p=(src_mean_cp-sub_mean_cp))
-        #final_trans = np.matmul(T_translate, final_trans)
-
-
-        #if self.visualize:
-            #print "FINAL RESULT"
-            #visualize_reg(self.sub_pcd,
-                          #self.src_pcd,
-                          #deepcopy(self.sub_pcd).transform(final_trans),
-                          #result_cp_idx=sub_cp_idx,
-                          #target_cp_idx=self.src_tool.contact_pnt_idx,
-                          #name="Final result applied to original sub tool.")
-
-
-        ## Must account for the fact that the src and sub tool pcs have been centered at
-        ## 0, so we create one final translation transformation
-        #orig_sub_tool = self._np_to_o3d(self.sub_tool.get_unnormalized_pc())
-        #orig_src_tool = self._np_to_o3d(self.src_tool.get_unnormalized_pc())
-        #orig_sub_tool.transform(final_trans)
-
-        #src_mean_cp = np.mean(np.asarray(orig_src_tool.points)[self.src_tool.contact_pnt_idx,:], axis=0)
-        #sub_mean_cp = np.mean(np.asarray(orig_sub_tool.points)[sub_cp_idx, :], axis=0)
-        #T_translate = get_T_from_R_p(p=(src_mean_cp-sub_mean_cp))
-        #final_trans = np.matmul(T_translate, final_trans)
-
-        #return final_trans, sub_cp_idx
 
     def self_substitute(self):
         """
