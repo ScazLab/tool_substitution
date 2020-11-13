@@ -1282,7 +1282,7 @@ class ToolSubstitution(object):
             if dislikeness > 0.05: # tune this value
                 print "[tool_substitution_controller][step_6_choose_contact_area] The contact areas are different."
                 src_contact_area_pcd = o3d.geometry.PointCloud()
-                src_contact_area_pcd.points = o3d.utility.Vector3dVector(np.asarray(self.src_pcd.points)[self.src_tool.contact_pnt_idx])
+                src_contact_area_pcd.points = o3d.utility.Vector3dVector(deepcopy(np.asarray(self.src_pcd.points)[self.src_tool.contact_pnt_idx]))
                 
                 aligned_set_1, _, _ = align_pcd_select_size([contact_area_1_pcd, src_contact_area_pcd])
                 aligned_set_1_sub_center = aligned_set_1[0].get_center()
@@ -1303,7 +1303,7 @@ class ToolSubstitution(object):
                     o3d.visualization.draw_geometries(aligned_set_2, "Step 6: align contact area 2 and source contact area")
                 print "[tool_substitution_controller][step_6_choose_contact_area] contact area 1 distance to source: ", distance_1
                 print "[tool_substitution_controller][step_6_choose_contact_area] contact area 2 distance to source: ", distance_2
-                if distance_1 <= distance_2 * 1.5:
+                if distance_1 <= distance_2:
                     print "[tool_substitution_controller][step_6_choose_contact_area] Initial Alignment contact areas looks more like the source contact area. Choose 1: the initial alignment contact area"
                     contact_area = contact_area_1
                 else:
@@ -1388,24 +1388,35 @@ class ToolSubstitution(object):
         print "[tool_substitution_controller][step_7_align_tools] T_src"
         print T_src
         
-        #if self.visualize:
-            #copy_src_pcd = deepcopy(self.src_pcd)
-            #copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
-            #copy_src_pcd.transform(T_src)
-            #copy_sub_pcd = deepcopy(self.sub_pcd)
-            #copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.])) 
-            #copy_sub_pcd.transform(T_sub)
-            #o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 7: final alignment result")        
+        if self.visualize:
+            copy_src_pcd = deepcopy(self.src_pcd)
+            copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+            copy_src_pcd.transform(T_src)
+            copy_sub_pcd = deepcopy(self.sub_pcd)
+            copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.])) 
+            copy_sub_pcd.transform(T_sub)
+            o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 7: final alignment result")        
 
-        copy_src_pcd = deepcopy(self.src_pcd)
-        copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
-        copy_src_pcd.transform(T_src)
-        copy_sub_pcd = deepcopy(self.sub_pcd)
-        copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.])) 
-        copy_sub_pcd.transform(T_sub)
-        o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 7: final alignment result")
+        #copy_src_pcd = deepcopy(self.src_pcd)
+        #copy_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+        #copy_src_pcd.transform(T_src)
+        #copy_sub_pcd = deepcopy(self.sub_pcd)
+        #copy_sub_pcd.paint_uniform_color(np.array([1., 0., 0.])) 
+        #copy_sub_pcd.transform(T_sub)
+        #o3d.visualization.draw_geometries([copy_src_pcd, copy_sub_pcd], "Step 7: final alignment result")
+        
+        #o3d_src_pcd = o3d.io.read_point_cloud("/home/meiying/ros_devel_ws/src/meiying_crow_tool/pointcloud/tools/butcher_knife.ply")
+        #o3d_src_pcd.paint_uniform_color(np.array([0., 1., 0.]))
+        #o3d_src_pcd.transform(T_src)
+        #o3d_sub_pcd = o3d.io.read_point_cloud("/home/meiying/ros_devel_ws/src/meiying_crow_tool/pointcloud/tools/cake_cutter.ply")
+        #o3d_sub_pcd.paint_uniform_color(np.array([1., 0., 0.])) 
+        #o3d_sub_pcd.transform(T_sub)
+        #o3d.visualization.draw_geometries([o3d_src_pcd, o3d_sub_pcd], "Step 7: read from pcs directly")        
                 
         Tsrc_sub = np.matmul(get_homogenous_transformation_matrix_inverse(T_src), T_sub)
+        
+        print "[tool_substitution_controller][step_7_align_tools] Tsrc_sub: "
+        print Tsrc_sub
         
         return Tsrc_sub
 
@@ -1452,13 +1463,13 @@ class ToolSubstitution(object):
         #else:
         
         # scale the two tools based on the action part size
-        step_3_results = self.step_3_scale_sub_tool(self.src_pcd, self.sub_pcd, step_1_src_action_indices, step_1_sub_action_indices)
+        step_3_results = self.step_3_scale_sub_tool(deepcopy(self.src_pcd), deepcopy(self.sub_pcd), step_1_src_action_indices, step_1_sub_action_indices)
         
         step_3_scaled_sub_pcd          = step_3_results[0]
         step_3_T_sub_action_part_scale = step_3_results[1] # scale appeared first, so for the contact area found with this method, first unrotate, and then unscale
         
         # use ICP to align the action part to find the contact area
-        step_4_results = self.step_4_register_action_parts(self.src_pcd, step_1_src_action_indices, step_3_scaled_sub_pcd, step_1_sub_action_indices)
+        step_4_results = self.step_4_register_action_parts(deepcopy(self.src_pcd), step_1_src_action_indices, step_3_scaled_sub_pcd, step_1_sub_action_indices)
         
         step_4_scaled_aligned_sub_action_pcd = step_4_results[0]
         step_4_T_sub                         = step_4_results[1]
@@ -1467,7 +1478,7 @@ class ToolSubstitution(object):
         # find the corresponding contact area
         scaled_aligned_sub_pcd = deepcopy(step_3_scaled_sub_pcd)
         scaled_aligned_sub_pcd.transform(step_4_T_sub)
-        step_5_results = self.step_5_get_aligned_contact_area(self.src_pcd,
+        step_5_results = self.step_5_get_aligned_contact_area(deepcopy(self.src_pcd),
                                                               scaled_aligned_sub_pcd,
                                                               step_1_src_action_indices, 
                                                               step_1_sub_action_indices,                                                              

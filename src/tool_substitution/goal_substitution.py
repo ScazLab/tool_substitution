@@ -674,7 +674,7 @@ class GoalSubstitution(ToolSubstitution):
             print "[tool_substitution_controller][step_6_choose_contact_area] max distance percentage(0, 1): ", np.max(distance) / max(sub_action_part_norm)
             print "[tool_substitution_controller][step_6_choose_contact_area] sub action dimension: ", max(sub_action_part_norm)
             
-            if dislikeness > 0.025: # tune this value
+            if dislikeness > 0.02: # tune this value
                 print "[tool_substitution_controller][step_6_choose_contact_area] The contact areas are different."
                 src_contact_area_pcd = o3d.geometry.PointCloud()
                 src_contact_area_pcd.points = o3d.utility.Vector3dVector(np.asarray(self.src_pcd.points)[self.src_tool.contact_pnt_idx])
