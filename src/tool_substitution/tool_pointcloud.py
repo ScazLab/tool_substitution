@@ -282,7 +282,13 @@ class ToolPointCloud(object):
 
     def get_axis(self, axis_order=[0,1,2]):
         axes = self.bb.get_normalized_axis()
-        return axes[:, axis_order]
+        R = axes[:, axis_order]
+        x = R.T[0]
+        y = R.T[1]
+        z = np.cross(x, y)
+        new_R = np.array([x, y, z]).T
+        return new_R
+        #return axes[:, axis_order]
 
     def transform(self, pnts):
         axes = self.get_axis()

@@ -30,7 +30,6 @@ from scipy.spatial.transform import Rotation as Rot
 from get_target_tool_pose import get_T_from_R_p, T_inv, get_scaling_T
 from pointcloud_registration import prepare_dataset, draw_registration_result
 
-
 def gen_contact_surface(pc, pnt_idx):
     """
     Generare a contact surface on a pointcloud around a desired point.
@@ -386,17 +385,37 @@ class ToolSubstitution(object):
         
         return sub_action_segment, sub_action_segment_pnts, sub_action_segment_indices
 
+    def get_axis(self, index):
+        axis = None
+        
+        if index == 0:
+            axis = [1., 0., 0.]
+        elif index == 1:
+            axis = [0., 1., 0.]
+        elif index == 2:
+            axis = [0., 0., 1.]
+        
+        return np.array(axis)
+
     def _rotate_np_with_segments(self, np_with_segments, p):
         # np_with_segments: n * 4
         
         R = []
-        for index in list(p):
-            if index == 0:
-                R.append([1., 0., 0.])
-            elif index == 1:
-                R.append([0., 1., 0.])
-            elif index == 2:
-                R.append([0., 0., 1.])
+        x = self.get_axis(p[0])
+        y = self.get_axis(p[1])
+        z = np.cross(x, y)
+        
+        R.append(x)
+        R.append(y)
+        R.append(z)
+        
+        #for index in list(p):
+            #if index == 0:
+                #R.append([1., 0., 0.])
+            #elif index == 1:
+                #R.append([0., 1., 0.])
+            #elif index == 2:
+                #R.append([0., 0., 1.])
         
         R = np.array(R).T
         
@@ -408,8 +427,8 @@ class ToolSubstitution(object):
         
         pnts = np.hstack((pnts, np.array([segments]).T))
         
-        #print "R"
-        #print R
+        print "[tool_substitution_controller][_rotate_np_with_segments] R"
+        print R
         T = np.vstack((R, np.array([[0., 0., 0.]])))
         T = np.hstack((T, np.array([[0., 0., 0., 1.]]).T))
         
@@ -450,6 +469,9 @@ class ToolSubstitution(object):
         copy_sub_np_pnts = deepcopy(sub_np_pnts)
         
         T_src_pcd, T_sub_pcd, temp_src_T, T_src_to_return, T_sub_to_return = self._scale_pcs(src_np_pnts=copy_src_np_pnts, sub_np_pnts=copy_sub_np_pnts)
+        
+        print "[tool_substitution_controller][_align_pnts] T_sub_to_return"
+        print T_sub_to_return
         
         #o3d.visualization.draw_geometries([T_src_pcd, T_sub_pcd], "initial normalize")
         
@@ -663,7 +685,7 @@ class ToolSubstitution(object):
 
         #return fit
 
-    def get_random_contact_pnt(self):
+    def get_random_contact_pnt(self): # star 2 control condition
         """
         Get a random contact point and rotation matrix for substitute tool.
         """
@@ -720,6 +742,8 @@ class ToolSubstitution(object):
 
         T_src = self._calc_center_and_align_T(src_tool_tpc)
         T_sub = self._calc_center_and_align_T(sub_tool_tpc)
+        print "[tool_substitution_controller][_scale_pcs] T_sub"
+        print T_sub
 
         T_src_pcd = self._np_to_o3d(src_np_pnts)
         T_sub_pcd = self._np_to_o3d(sub_np_pnts)
