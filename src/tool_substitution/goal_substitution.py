@@ -369,6 +369,9 @@ class GoalSubstitution(ToolSubstitution):
         
         T_src_pcd, T_sub_pcd, temp_src_T, T_src_to_return, T_sub_to_return = self._scale_pcs(src_np_pnts=copy_src_np_pnts, sub_np_pnts=copy_sub_np_pnts)
         
+        print "[goal_substitution][_align_pnts] T_sub_to_return"
+        print T_sub_to_return
+        
         #print "source center: ", T_src_pcd.get_center()
         #print "sub center: ", T_sub_pcd.get_center()
         #o3d.visualization.draw_geometries([T_src_pcd, T_sub_pcd], "goal initial normalize")
@@ -417,15 +420,25 @@ class GoalSubstitution(ToolSubstitution):
             print "p"
             print p
             #T, sub_pnts = self._rotate_np_with_segments(copy_sub_np_pnts, p)
+            #R = []
+            #for i in p:
+                #if i == 0:
+                    #R.append([1., 0., 0.])
+                #elif i == 1:
+                    #R.append([0., 1., 0.])
+                #elif i == 2:
+                    #R.append([0., 0., 1.])  
+            #R = np.array(R).T
             R = []
-            for i in p:
-                if i == 0:
-                    R.append([1., 0., 0.])
-                elif i == 1:
-                    R.append([0., 1., 0.])
-                elif i == 2:
-                    R.append([0., 0., 1.])  
-            R = np.array(R).T
+            x = self.get_axis(p[0])
+            y = self.get_axis(p[1])
+            z = np.cross(x, y)
+            
+            R.append(x)
+            R.append(y)
+            R.append(z)
+            
+            R = np.array(R).T            
             T = np.identity(4)
             T[:3, :3] = R
             src_tool_norm = src_bb.norms
