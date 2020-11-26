@@ -697,11 +697,12 @@ class ToolSubstitution(object):
         R = Rot.random(num=1).as_dcm()[0] # Generate a radom rotation matrix.
         T = get_T_from_R_p(R=R)
         sub.transform(T)
-
+        
         src_cp = np.mean(np.asarray(src.points)[self.src_tool.contact_pnt_idx, :],
                          axis=0)
-        _, sub_contact_pnt_idx = self._get_closest_pnt(src_cp,
-                                                       np.asarray(sub.points))
+        sub_contact_pnt_idx = random.randint(0, len(np.asarray(sub.points)) - 1)
+        #_, sub_contact_pnt_idx = self._get_closest_pnt(src_cp,
+                                                       #np.asarray(sub.points))
 
         # Translate the the sub tool such that the contact points are overlapping
         sub_cp = np.asarray(sub.points)[sub_contact_pnt_idx, :]
@@ -716,11 +717,11 @@ class ToolSubstitution(object):
         # sub_contact_pnt = self.sub_tool.get_pnt(sub_contact_pnt_idx)
 
         # T = get_T_from_R_p(p=np.zeros((1,3)), R=R )
-        if self.visualize:
-            visualize_reg(sub_init, src, sub,
-                          result_cp_idx=sub_contact_pnt,
-                          target_cp_idx=self.src_tool.contact_pnt_idx,
-                          name="get random contact pnts")
+        #if self.visualize:
+        visualize_reg(sub_init, src, sub,
+                      result_cp_idx=sub_contact_pnt,
+                      target_cp_idx=self.src_tool.contact_pnt_idx,
+                      name="get random contact pnts")
 
         return final_T, sub_contact_pnt
 
