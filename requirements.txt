@@ -7,7 +7,7 @@ jedi==0.17.0
 joblib==1.2.0
 kiwisolver==1.2.0
 matplotlib==3.2.1
-numpy==1.18.3
+numpy==1.22.0
 numpy-stl==2.11.2
 opencv-python==4.2.0.34
 parso==0.7.0
